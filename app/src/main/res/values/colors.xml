@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="background_teal">#F0F8F9</color>
+    <color name="teal_primary">#008080</color>
+    <color name="teal_dark">#004D40</color>
+    <color name="grey_text">#757575</color>
+    <color name="dark_heading">#212121</color>
+    <color name="divider_color">#BDBDBD</color>
+    <color name="portal_bg">#F8FAFC</color>
+    <color name="portal_accent">#6366F1</color>
+    <color name="portal_accent_light">#EEF2FF</color>
+    <color name="portal_dark">#0F172A</color>
+    <color name="portal_text_main">#1E293B</color>
+    <color name="portal_text_muted">#64748B</color>
+    <color name="portal_card_bg">#FFFFFF</color>
+    <color name="portal_divider">#E2E8F0</color>
+    <color name="portal_notification_dot">#EF4444</color>
+</resources>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "543866248276",
+    "project_id": "shadescan-ai",
+    "storage_bucket": "shadescan-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:543866248276:android:a6748e179a7068fe53e1c1",
+        "android_client_info": {
+          "package_name": "com.example.dental_shade_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCUuhDXnb9T2fUQHhdTQytXTMmmbQIF3w4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">ShadeScanAI</string>
+    <string name="app_title">ShadeScan AI</string>
+    <string name="welcome_back_doctor">Welcome Back, Doctor</string>
+    <string name="sign_in_subtitle">Sign in to your clinical portal</string>
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Password</string>
+    <string name="forgot_password">FORGOT PASSWORD?</string>
+    <string name="log_in">Log In</string>
+    <string name="or_secure_login">OR SECURE LOGIN</string>
+    <string name="sign_up_link">Don\'t have an account? Sign Up</string>
+    <string name="banner_content_description">Dental equipment banner</string>
+    <string name="fingerprint_login">Fingerprint Login</string>
+    <string name="face_id_login">Face ID Login</string>
+
+    <!-- Dashboard Strings -->
+    <string name="clinical_portal">CLINICAL PORTAL</string>
+    <string name="default_doctor_name">Dr. Sarah Miller</string>
+    <string name="total_patients">TOTAL PATIENTS</string>
+    <string name="ai_shade_scans">AI SHADE SCANS</string>
+    <string name="match_shade">MATCH SHADE</string>
+    <string name="add_patient">ADD PATIENT</string>
+    <string name="recent_scans">RECENT SCANS</string>
+    <string name="view_all">View All</string>
+    <string name="no_scans_yet">No Scans Recorded Yet</string>
+    <string name="no_scans_desc">Perform or upload your first dental\nmatch to begin logs.</string>
+    <string name="nav_home">HOME</string>
+    <string name="nav_patients">PATIENTS</string>
+    <string name="nav_shades">SHADES</string>
+    <string name="nav_settings">SETTINGS</string>
+</resources>
