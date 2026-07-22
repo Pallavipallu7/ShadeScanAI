@@ -8,7 +8,12 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+build/
+**/build/
+**/node_modules/
+**/dist/
+**/.env
+**/.env.local
 /captures
 .externalNativeBuild
 .cxx
