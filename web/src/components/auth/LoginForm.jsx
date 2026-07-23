@@ -97,6 +97,7 @@ export default function LoginForm({ onSwitchToRegister, onForgotPassword }) {
               <div className="relative">
                 <Mail className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
                 <input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -124,6 +125,7 @@ export default function LoginForm({ onSwitchToRegister, onForgotPassword }) {
               <div className="relative">
                 <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
                 <input
+                  id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -158,6 +160,7 @@ export default function LoginForm({ onSwitchToRegister, onForgotPassword }) {
 
             {/* Submit Button */}
             <button
+              id="login-button"
               type="submit"
               disabled={loading}
               className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-70"

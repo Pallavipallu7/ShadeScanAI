@@ -1,0 +1,12 @@
+{
+  "name": "shadescan-web-selenium-tests",
+  "version": "1.0.0",
+  "description": "Selenium WebDriver E2E Automation tests for ShadeScan AI clinical portal",
+  "main": "tests/login.test.js",
+  "scripts": {
+    "test:login": "node tests/login.test.js"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.23.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "shadescan-android-appium-tests",
+  "version": "1.0.0",
+  "description": "Appium E2E Automation tests for ShadeScan AI Android Application",
+  "main": "tests/android.test.js",
+  "scripts": {
+    "test:android": "node tests/android.test.js"
+  },
+  "dependencies": {
+    "webdriverio": "^8.40.0"
+  }
+}
