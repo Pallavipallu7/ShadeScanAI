@@ -1,6 +1,6 @@
 # 📱 ShadeScan AI — Android Appium E2E Automation Testing Guide
 
-This directory contains the Appium (Selenium WebDriver mobile protocol) End-to-End (E2E) automation test suite for verifying the ShadeScan AI native Android application login flow and dashboard redirection.
+This directory contains the Appium (Selenium WebDriver mobile protocol) End-to-End (E2E) automation test suite for verifying the ShadeScan AI native Android application. It automatically executes a complete patient-creation, shade-scanning, and report-saving flow, generating an **Excel analysis report** upon completion.
 
 ---
 
@@ -10,8 +10,8 @@ Before running the tests, ensure you have the following installed on your machin
 1.  **Node.js** (v18 or higher recommended)
 2.  **Appium Server** (v2.x or higher)
 3.  **Appium UiAutomator2 Driver** (for Android automation)
-4.  **Android Studio** with a running **Android Emulator** or a connected physical Android device.
-5.  **Java Development Kit (JDK 17 or JDK 21)** configured in your env variables.
+4.  **Android Studio** with a running **Android Emulator** or connected physical device.
+5.  **Java Development Kit (JDK 21)** configured in your env variables.
 
 ---
 
@@ -55,14 +55,15 @@ npm run test:android
 
 ---
 
-## 📁 Test Case Breakdown
+## 📊 Test Report Analysis Output
 
-### `tests/android.test.js`
-*   **Target Package**: `com.example.dental_shade_app`
-*   **Target Activity**: `.LoginActivity` (Redirection verified to `.DashboardActivity`)
-*   **Flow**:
-    1.  Establishes session with running Android Emulator via Appium Server.
-    2.  Locates username/password inputs using Android UI selectors.
-    3.  Inputs clinical test credentials.
-    4.  Triggers the login validation flow.
-    5.  Waits for redirection validation to the dashboard landing screen.
+Once execution completes, Appium saves the results in an Excel spreadsheet under:
+📂 **`app/appium-tests/reports/Appium_Test_Report.xlsx`**
+
+The report documents:
+*   **Step No.** (Order of execution)
+*   **Test Feature / Action** (E.g. App initialization, login, shade match, saving reports)
+*   **Description** (Actions taken during the step)
+*   **Execution Status** (`PASS` or `FAIL`)
+*   **Timestamp** (Time of execution)
+*   **Remarks** (Details or error messages captured by Appium)
