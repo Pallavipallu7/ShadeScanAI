@@ -12,6 +12,7 @@
     "selenium-webdriver": "4.18.1"
   },
   "devDependencies": {
+    "chromedriver": "^150.0.4",
     "mocha": "10.4.0"
   },
   "engines": {
