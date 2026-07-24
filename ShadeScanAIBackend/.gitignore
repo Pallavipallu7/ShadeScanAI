@@ -1,3 +1,5 @@
 Security_Results/
 __pycache__/
 *.pyc
+k6-performance-summary.md
+summary.json

@@ -1,0 +1,89 @@
+name: Backend API k6 Load Test Pipeline
+
+on:
+  push:
+    paths:
+      - 'ShadeScanAIBackend/**'
+      - '.github/workflows/load-test.yml'
+    branches: [main, master]
+  pull_request:
+    paths:
+      - 'ShadeScanAIBackend/**'
+      - '.github/workflows/load-test.yml'
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k6-load-test:
+    name: k6 API Load Test (100 VUs / 1m)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup k6 Engine
+        uses: grafana/setup-k6-action@v1
+
+      - name: Install Flask Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ShadeScanAIBackend/requirements.txt
+
+      - name: Start Flask Backend Server in Background
+        run: |
+          python ShadeScanAIBackend/app.py &
+          echo "FLASK_PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for Flask API Server (Port 5000)
+        run: |
+          sleep 2
+          for i in $(seq 1 20); do
+            STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://127.0.0.1:5000/api/v1/dashboard/stats || echo "000")
+            echo "Attempt $i → HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Flask API Server is ready on http://127.0.0.1:5000"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run k6 Load Test (100 VUs / 1 min)
+        env:
+          BACKEND_URL: http://127.0.0.1:5000
+        run: |
+          k6 run --summary-export=summary.json ShadeScanAIBackend/scripts/load-test.js || true
+
+      - name: Parse k6 Summary & Append to Step Summary
+        if: always()
+        run: |
+          node ShadeScanAIBackend/scripts/parseK6Summary.js summary.json
+
+      - name: Upload k6 Summary Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary-json
+          path: summary.json
+          retention-days: 30
+
+      - name: Upload k6 Performance Report Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-performance-report
+          path: ShadeScanAIBackend/k6-performance-summary.md
+          retention-days: 30
