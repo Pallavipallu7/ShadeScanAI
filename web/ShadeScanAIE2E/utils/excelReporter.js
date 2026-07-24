@@ -10,7 +10,7 @@ const path     = require('path');
 const fs       = require('fs');
 const htmlGen  = require('./htmlReportGenerator');
 
-const RESULTS_DIR = path.resolve(__dirname, '../../Test_Results');
+const RESULTS_DIR = path.resolve(__dirname, '../Test_Results');
 const EXCEL_DIR   = path.join(RESULTS_DIR, 'Excel');
 const HTML_DIR    = path.join(RESULTS_DIR, 'HTML');
 [RESULTS_DIR, EXCEL_DIR, HTML_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));

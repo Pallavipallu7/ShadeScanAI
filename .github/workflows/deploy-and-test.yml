@@ -143,7 +143,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: selenium-excel-report
-          path: web/ShadeScanAIE2E/Test_Results/Excel/selenium-report.xlsx
+          path: |
+            web/ShadeScanAIE2E/Test_Results/Excel/selenium-report.xlsx
+            web/Test_Results/Excel/selenium-report.xlsx
           retention-days: 30
           if-no-files-found: warn
 
@@ -153,7 +155,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: selenium-html-report
-          path: web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html
+          path: |
+            web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html
+            web/Test_Results/HTML/execution-report.html
           retention-days: 30
           if-no-files-found: warn
 
@@ -163,14 +167,22 @@ jobs:
         run: |
           mkdir -p web/dist/reports/latest
           mkdir -p "web/dist/reports/history/build-${{ github.run_number }}"
+
+          REPORT_SRC=""
           if [ -f web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html ]; then
-            cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
-               web/dist/reports/latest/execution-report.html
-            cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
-               "web/dist/reports/history/build-${{ github.run_number }}/execution-report.html"
-            echo "✅ Report injected into dist"
+            REPORT_SRC="web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html"
+          elif [ -f web/Test_Results/HTML/execution-report.html ]; then
+            REPORT_SRC="web/Test_Results/HTML/execution-report.html"
+          fi
+
+          if [ -n "$REPORT_SRC" ]; then
+            cp "$REPORT_SRC" web/dist/reports/latest/execution-report.html
+            cp "$REPORT_SRC" web/dist/reports/latest/index.html
+            cp "$REPORT_SRC" "web/dist/reports/history/build-${{ github.run_number }}/execution-report.html"
+            cp "$REPORT_SRC" "web/dist/reports/history/build-${{ github.run_number }}/index.html"
+            echo "✅ Report injected successfully into web/dist/reports/latest/"
           else
-            echo "⚠️  No HTML report found – skipping inject"
+            echo "⚠️ No HTML report found"
           fi
 
       # ── Re-upload dist with embedded reports
