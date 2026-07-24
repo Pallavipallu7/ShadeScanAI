@@ -56,6 +56,23 @@ exports.mochaHooks = {
   async afterAll() {
     await writeExcel();
     await htmlGen.generate(rows, byType, HTML_DIR);
+
+    const total = rows.length;
+    const passed = rows.filter(r => r.status === 'PASS').length;
+    const failed = rows.filter(r => r.status === 'FAIL').length;
+    const passRate = total > 0 ? ((passed / total) * 100).toFixed(2) + '%' : '0.00%';
+    const totalSec = (rows.reduce((s, r) => s + r.duration, 0) / 1000).toFixed(2) + 's';
+
+    const summary = {
+      total,
+      passed,
+      failed,
+      passRate,
+      duration: totalSec,
+      categories: Object.keys(byType).length
+    };
+    fs.writeFileSync(path.join(RESULTS_DIR, 'summary.json'), JSON.stringify(summary, null, 2), 'utf8');
+
     console.log(`\n📊  Excel  → ${EXCEL_OUT}`);
     console.log(`📄  HTML   → ${path.join(HTML_DIR, 'execution-report.html')}\n`);
   }
