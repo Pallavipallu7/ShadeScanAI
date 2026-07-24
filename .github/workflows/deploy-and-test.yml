@@ -7,7 +7,6 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-# ── Required for GitHub Pages deployment ─────────────────────
 permissions:
   contents: read
   pages: write
@@ -19,7 +18,7 @@ concurrency:
 
 jobs:
   # ════════════════════════════════════════════════════════════
-  #  JOB 1 ─ Build React/Vite frontend
+  #  JOB 1 – Build React/Vite frontend
   # ════════════════════════════════════════════════════════════
   build:
     name: Build Vite Frontend
@@ -36,21 +35,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
-      - name: Build with Vite (base = /ShadeScanAI/)
+      - name: Build with Vite (base /ShadeScanAI/)
         run: npm run build -- --base /ShadeScanAI/
         env:
-          VITE_FIREBASE_API_KEY:              ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN:          ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID:           ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET:       ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID:  ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID:               ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID:          ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET:      ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID:              ${{ secrets.VITE_FIREBASE_APP_ID }}
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
@@ -60,7 +57,7 @@ jobs:
           retention-days: 1
 
   # ════════════════════════════════════════════════════════════
-  #  JOB 2 ─ Run 1,100 Selenium E2E tests
+  #  JOB 2 – Selenium E2E (1,100 assertions)
   # ════════════════════════════════════════════════════════════
   e2e:
     name: Selenium E2E (1,100 assertions)
@@ -82,62 +79,65 @@ jobs:
           name: vite-dist
           path: web/dist
 
-      # ── Install Chrome + ChromeDriver ─────────────────────
-      - name: Install Google Chrome
+      # ── Install Chrome + matching ChromeDriver via setup-chrome
+      - name: Setup Chrome & ChromeDriver
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Verify Chrome & ChromeDriver
         run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          sudo apt-get update -qq
-          sudo apt-get install -y google-chrome-stable
-          google-chrome --version
+          google-chrome --version || chromium --version || true
+          chromedriver --version || true
 
-      # ── Install frontend deps (for vite preview) ──────────
-      - name: Install frontend deps
+      # ── Install frontend deps (needed for vite preview)
+      - name: Install frontend dependencies
         working-directory: web
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
-      # ── Install E2E suite deps ─────────────────────────────
+      # ── Install E2E suite deps
       - name: Install E2E dependencies
         working-directory: web/ShadeScanAIE2E
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
-      # ── Start Vite preview server in background ───────────
+      # ── Start Vite preview in background
       - name: Start Vite preview server
         working-directory: web
         run: |
           npx vite preview --port 5173 --host 127.0.0.1 --base /ShadeScanAI/ &
           echo "VITE_PID=$!" >> $GITHUB_ENV
 
-      - name: Wait for preview server to be ready
+      # ── Wait until preview is ready
+      - name: Wait for preview server
         run: |
           sleep 4
-          for i in $(seq 1 15); do
+          for i in $(seq 1 20); do
             STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://127.0.0.1:5173/ShadeScanAI/ || echo "000")
-            echo "Attempt $i – HTTP $STATUS"
+            echo "Attempt $i → HTTP $STATUS"
             if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
-              echo "✅ Preview server is up"
+              echo "✅ Preview server ready"
               break
             fi
-            sleep 2
+            sleep 3
           done
 
       - name: Export TEST_BASE_URL
         run: echo "TEST_BASE_URL=http://127.0.0.1:5173/ShadeScanAI" >> $GITHUB_ENV
 
-      # ── Run E2E suite ──────────────────────────────────────
-      - name: Run 1,100 Selenium E2E tests
+      # ── Run 1,100 Selenium tests
+      - name: Run Selenium E2E tests
         working-directory: web/ShadeScanAIE2E
         env:
           TEST_BASE_URL: ${{ env.TEST_BASE_URL }}
         run: npm test
-        continue-on-error: true   # Always produce reports even on failure
+        continue-on-error: true
 
-      # ── Stop Vite preview ──────────────────────────────────
+      # ── Stop preview
       - name: Stop Vite preview server
         if: always()
-        run: kill $VITE_PID 2>/dev/null || true
+        run: kill ${{ env.VITE_PID }} 2>/dev/null || true
 
-      # ── Upload raw test artifacts ──────────────────────────
+      # ── Upload Excel artifact
       - name: Upload Excel report
         if: always()
         uses: actions/upload-artifact@v4
@@ -145,7 +145,9 @@ jobs:
           name: selenium-excel-report
           path: web/ShadeScanAIE2E/Test_Results/Excel/selenium-report.xlsx
           retention-days: 30
+          if-no-files-found: warn
 
+      # ── Upload HTML artifact
       - name: Upload HTML report
         if: always()
         uses: actions/upload-artifact@v4
@@ -153,20 +155,26 @@ jobs:
           name: selenium-html-report
           path: web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html
           retention-days: 30
+          if-no-files-found: warn
 
-      # ── Store reports in dist for unified GH Pages deploy ─
-      - name: Inject HTML report into dist (latest)
+      # ── Inject report into dist for unified Pages deploy
+      - name: Inject report into dist
         if: always()
         run: |
           mkdir -p web/dist/reports/latest
-          mkdir -p web/dist/reports/history/build-${{ github.run_number }}
-          cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
-             web/dist/reports/latest/execution-report.html || echo "Report not found – skipping copy"
-          cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
-             web/dist/reports/history/build-${{ github.run_number }}/execution-report.html || true
+          mkdir -p "web/dist/reports/history/build-${{ github.run_number }}"
+          if [ -f web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html ]; then
+            cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
+               web/dist/reports/latest/execution-report.html
+            cp web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html \
+               "web/dist/reports/history/build-${{ github.run_number }}/execution-report.html"
+            echo "✅ Report injected into dist"
+          else
+            echo "⚠️  No HTML report found – skipping inject"
+          fi
 
-      # ── Re-upload dist with reports embedded ──────────────
-      - name: Upload unified dist artifact (with reports)
+      # ── Re-upload dist with embedded reports
+      - name: Upload unified dist (with reports)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -174,36 +182,35 @@ jobs:
           path: web/dist
           retention-days: 1
 
-      # ── Step summary ──────────────────────────────────────
+      # ── Write step summary
       - name: Write step summary
         if: always()
         run: |
-          TOTAL=1100
-          PASS=$(grep -c "passing" web/ShadeScanAIE2E/Test_Results/HTML/execution-report.html 2>/dev/null || echo "N/A")
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO="${{ github.event.repository.name }}"
+          cat >> $GITHUB_STEP_SUMMARY << EOF
           ## 🦷 ShadeScanAI – Selenium E2E Results
 
           | Metric | Value |
           |--------|-------|
           | **Total Assertions** | 1,100 |
           | **Categories** | 110 |
-          | **Build #** | ${{ github.run_number }} |
-          | **Commit** | `${{ github.sha }}` |
-          | **Branch** | `${{ github.ref_name }}` |
+          | **Build** | #${{ github.run_number }} |
+          | **Commit** | \`${{ github.sha }}\` |
+          | **Branch** | \`${{ github.ref_name }}\` |
 
           ### 📊 Reports
-
           | Report | Link |
           |--------|------|
-          | 📄 HTML Report (latest) | [View on GitHub Pages](https://$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]').github.io/${{ github.event.repository.name }}/reports/latest/execution-report.html) |
-          | 📦 Excel Artifact | Download from **Actions → Artifacts → selenium-excel-report** |
-          | 📝 HTML Artifact  | Download from **Actions → Artifacts → selenium-html-report** |
+          | 📄 HTML Report (latest) | [View](https://${OWNER}.github.io/${REPO}/reports/latest/execution-report.html) |
+          | 📦 Excel Artifact | Actions → Artifacts → **selenium-excel-report** |
+          | 📝 HTML Artifact  | Actions → Artifacts → **selenium-html-report** |
 
-          > Tests run against local Vite preview (`http://127.0.0.1:5173/ShadeScanAI`)
+          > Tested against Vite preview at \`http://127.0.0.1:5173/ShadeScanAI\`
           EOF
 
   # ════════════════════════════════════════════════════════════
-  #  JOB 3 ─ Deploy unified dist to GitHub Pages
+  #  JOB 3 – Deploy to GitHub Pages
   # ════════════════════════════════════════════════════════════
   deploy:
     name: Deploy to GitHub Pages
@@ -236,12 +243,13 @@ jobs:
 
       - name: Write deployment summary
         run: |
+          PAGE_URL="${{ steps.deployment.outputs.page_url }}"
           cat >> $GITHUB_STEP_SUMMARY << EOF
-          ## 🚀 Deployment
+          ## 🚀 Deployment Complete
 
           | Item | URL |
           |------|-----|
-          | **Live App** | [${{ steps.deployment.outputs.page_url }}](${{ steps.deployment.outputs.page_url }}) |
-          | **Latest E2E Report** | [${{ steps.deployment.outputs.page_url }}reports/latest/execution-report.html](${{ steps.deployment.outputs.page_url }}reports/latest/execution-report.html) |
-          | **Build #${{ github.run_number }} Report** | [${{ steps.deployment.outputs.page_url }}reports/history/build-${{ github.run_number }}/execution-report.html](${{ steps.deployment.outputs.page_url }}reports/history/build-${{ github.run_number }}/execution-report.html) |
+          | **Live App** | [${PAGE_URL}](${PAGE_URL}) |
+          | **Latest Report** | [${PAGE_URL}reports/latest/execution-report.html](${PAGE_URL}reports/latest/execution-report.html) |
+          | **Build #${{ github.run_number }} Report** | [${PAGE_URL}reports/history/build-${{ github.run_number }}/execution-report.html](${PAGE_URL}reports/history/build-${{ github.run_number }}/execution-report.html) |
           EOF
