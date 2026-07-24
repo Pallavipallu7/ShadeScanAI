@@ -1,0 +1,23 @@
+{
+  "name": "shadescanai-appium",
+  "version": "1.0.0",
+  "description": "ShadeScanAI Mobile Appium E2E Test Suite - 1,111 Android Tests",
+  "main": "wdio.conf.js",
+  "scripts": {
+    "test": "wdio run wdio.conf.js",
+    "generate:reports": "node utils/generateHtmlReport.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@wdio/cli": "^8.32.0",
+    "@wdio/local-runner": "^8.32.0",
+    "@wdio/mocha-framework": "^8.32.0",
+    "@wdio/spec-reporter": "^8.32.0",
+    "appium": "^2.5.1",
+    "appium-uiautomator2-driver": "^3.0.1",
+    "mocha": "^10.4.0",
+    "webdriverio": "^8.32.0"
+  }
+}

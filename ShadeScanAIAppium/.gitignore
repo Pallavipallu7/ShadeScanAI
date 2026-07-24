@@ -1,4 +1,4 @@
 node_modules/
 Test_Results/
-Security_Results/
+.wdio-results.jsonl
 *.log

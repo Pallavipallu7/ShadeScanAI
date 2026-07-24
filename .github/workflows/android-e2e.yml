@@ -1,0 +1,113 @@
+name: Android Appium E2E Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: android-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android-e2e-test:
+    name: Android Appium E2E (1,111 Tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17 JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable KVM Hardware Acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-4.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build Android Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Install Appium & Dependencies
+        working-directory: ShadeScanAIAppium
+        run: |
+          npm install --legacy-peer-deps
+          npm install -g appium
+          npx appium driver install uiautomator2 || true
+
+      - name: Run Android Emulator & Appium Tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          profile: Nexus 6
+          script: |
+            chmod +x ShadeScanAIAppium/scripts/ci_run_tests.sh
+            ./ShadeScanAIAppium/scripts/ci_run_tests.sh
+        env:
+          APK_PATH: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Prepare reports for GitHub Pages & Artifacts
+        if: always()
+        run: |
+          mkdir -p deployment/reports/latest
+          mkdir -p "deployment/reports/history/build-${{ github.run_number }}"
+
+          REPORT_SRC=""
+          if [ -f ShadeScanAIAppium/Test_Results/HTML/execution-report.html ]; then
+            REPORT_SRC="ShadeScanAIAppium/Test_Results/HTML/execution-report.html"
+          fi
+
+          if [ -n "$REPORT_SRC" ]; then
+            cp "$REPORT_SRC" deployment/reports/latest/execution-report.html
+            cp "$REPORT_SRC" deployment/reports/latest/index.html
+            cp "$REPORT_SRC" "deployment/reports/history/build-${{ github.run_number }}/execution-report.html"
+            cp "$REPORT_SRC" "deployment/reports/history/build-${{ github.run_number }}/index.html"
+            echo "✅ Mobile HTML Report copied to deployment folder"
+          else
+            echo "⚠️ No Mobile HTML report found"
+          fi
+
+      - name: Upload Excel Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-excel-report
+          path: ShadeScanAIAppium/Test_Results/Excel/selenium-report.xlsx
+          retention-days: 30
+
+      - name: Upload HTML Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-html-report
+          path: ShadeScanAIAppium/Test_Results/HTML/execution-report.html
+          retention-days: 30
+
+      - name: Deploy Mobile Reports to GitHub Pages
+        if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: deployment
+          branch: gh-pages
+          target-folder: .
