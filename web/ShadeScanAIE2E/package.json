@@ -1,0 +1,21 @@
+{
+  "name": "shadescanai-e2e",
+  "version": "1.0.0",
+  "description": "ShadeScanAI Web E2E – 1,100 Selenium assertions across 110 categories",
+  "private": true,
+  "scripts": {
+    "test": "mocha",
+    "test:ci": "mocha --reporter spec"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "selenium-webdriver": "4.18.1"
+  },
+  "devDependencies": {
+    "mocha": "10.4.0",
+    "chromedriver": "124.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
