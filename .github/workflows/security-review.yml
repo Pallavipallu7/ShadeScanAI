@@ -1,0 +1,68 @@
+name: Backend Flask Security Review Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-security-audit:
+    name: Backend SAST & Security Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install E2E Dependencies (exceljs)
+        working-directory: web/ShadeScanAIE2E
+        run: npm install --legacy-peer-deps
+
+      - name: Run Backend Flask Security Scanner
+        run: |
+          export NODE_PATH="$GITHUB_WORKSPACE/web/ShadeScanAIE2E/node_modules"
+          node ShadeScanAIBackend/scripts/generateSecuritySuite.js
+
+      - name: Append Executive Summary to Step Summary
+        if: always()
+        run: |
+          if [ -f ShadeScanAIBackend/Security_Results/executive-summary.md ]; then
+            cat ShadeScanAIBackend/Security_Results/executive-summary.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Enforce Zero-Critical Security Policy Gate
+        run: |
+          CRITICAL_COUNT=$(grep -i "Critical" ShadeScanAIBackend/Security_Results/executive-summary.md | grep -oE '[0-9]+' | head -1 || echo "0")
+          echo "Critical Security Findings Count: $CRITICAL_COUNT"
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "❌ Zero-Critical Security Policy Violation: Found $CRITICAL_COUNT Critical vulnerability findings!"
+            exit 1
+          else
+            echo "✅ Zero-Critical Security Policy Passed (0 Critical Findings)."
+          fi
+
+      - name: Upload Backend Security Excel Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-security-excel-report
+          path: ShadeScanAIBackend/Security_Results/findings.xlsx
+          retention-days: 30
+
+      - name: Upload Backend Security Markdown Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-security-markdown-reports
+          path: ShadeScanAIBackend/Security_Results/*.md
+          retention-days: 30

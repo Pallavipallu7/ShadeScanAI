@@ -100,6 +100,39 @@ jobs:
         working-directory: web/ShadeScanAIE2E
         run: npm install --legacy-peer-deps
 
+      # ── Web Frontend Security Scan & Zero-Critical Policy Gate
+      - name: Run Web Frontend Security Scanner
+        run: |
+          export NODE_PATH="$GITHUB_WORKSPACE/web/ShadeScanAIE2E/node_modules"
+          node web/ShadeScanAIE2E/scripts/generateWebSecuritySuite.js
+
+      - name: Enforce Web Zero-Critical Security Policy Gate
+        run: |
+          CRITICAL_COUNT=$(grep -i "Critical" web/ShadeScanAIE2E/Security_Results/web-executive-summary.md | grep -oE '[0-9]+' | head -1 || echo "0")
+          echo "Web Critical Security Findings Count: $CRITICAL_COUNT"
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "❌ Zero-Critical Security Policy Violation: Found $CRITICAL_COUNT Critical findings!"
+            exit 1
+          else
+            echo "✅ Zero-Critical Security Policy Passed (0 Critical Findings)."
+          fi
+
+      - name: Upload Web Security Excel Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-security-excel-report
+          path: web/ShadeScanAIE2E/Security_Results/web-security-findings.xlsx
+          retention-days: 30
+
+      - name: Upload Web Security Markdown Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-security-markdown-reports
+          path: web/ShadeScanAIE2E/Security_Results/*.md
+          retention-days: 30
+
       # ── Start Vite preview in background
       - name: Start Vite preview server
         working-directory: web
@@ -236,6 +269,11 @@ jobs:
 
           > Tested against Vite preview at \`http://127.0.0.1:5173/ShadeScanAI\`
           EOF
+
+          if [ -f web/ShadeScanAIE2E/Security_Results/web-executive-summary.md ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat web/ShadeScanAIE2E/Security_Results/web-executive-summary.md >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ════════════════════════════════════════════════════════════
   #  JOB 3 – Deploy to GitHub Pages
