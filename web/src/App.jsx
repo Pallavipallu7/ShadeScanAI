@@ -22,10 +22,11 @@ import PatientDetail from './components/patients/PatientDetail';
 
 import VitaShadeGuide from './components/guide/VitaShadeGuide';
 import ProfileSettings from './components/settings/ProfileSettings';
+import CompareScansModal from './components/scan/CompareScansModal';
 
 import { getPatients, savePatient, updatePatient, getScanHistory, saveScanReport, deleteScanReport } from './utils/storageService';
 import { generateClinicalReportPDF } from './utils/pdfGenerator';
-import { Trash2, Download, Scan, Eye, X, Award } from 'lucide-react';
+import { Trash2, Download, Scan, Eye, X, Award, Layers } from 'lucide-react';
 
 function AppRoutes() {
   const { currentUser } = useAuth();
@@ -48,6 +49,7 @@ function AppRoutes() {
 
   // Image Preview Modal State
   const [previewModalImage, setPreviewModalImage] = useState(null);
+  const [compareModalScan, setCompareModalScan] = useState(null);
 
   // Fetch Patients & Scans on mount & user change
   useEffect(() => {
@@ -77,6 +79,7 @@ function AppRoutes() {
   };
 
   const handleStartScanWithImage = (imageSrc) => {
+    if (isProcessing) return; // Prevent duplicate analysis requests
     setScanImage(imageSrc);
     setIsProcessing(true);
     setScanResult(null);
@@ -91,12 +94,24 @@ function AppRoutes() {
     setScanImage(null);
     setScanResult(null);
     setIsProcessing(false);
+    navigate('/', { replace: true });
   };
 
   const handleSaveScanReport = async (reportData) => {
     const userId = currentUser?.uid;
     await saveScanReport(reportData, userId);
     await loadData();
+    setScanImage(null);
+    setScanResult(null);
+    navigate('/', { replace: true });
+  };
+
+  const handleDiscardAnalysis = () => {
+    if (window.confirm('Discard this analysis?\nUnsaved shade analysis data will be lost.')) {
+      setScanImage(null);
+      setScanResult(null);
+      navigate('/', { replace: true });
+    }
   };
 
   const handleDeleteScan = async (scanId) => {
@@ -131,6 +146,7 @@ function AppRoutes() {
                 <DashboardOverview 
                   patients={patients} 
                   scans={scans} 
+                  onSelectPatient={(p) => setSelectedPatient(p)}
                 />
               } 
             />
@@ -155,6 +171,18 @@ function AppRoutes() {
                       setScanResult(null);
                     }}
                     onSaveReport={handleSaveScanReport}
+                    onDeleteScan={() => {
+                      handleDiscardAnalysis();
+                    }}
+                    onCompareScan={() => {
+                      setCompareModalScan({
+                        predictedShade: scanResult.topShade,
+                        confidence: scanResult.confidence,
+                        dateTime: Date.now(),
+                        imageUri: scanImage,
+                        patientName: 'Current Scan'
+                      });
+                    }}
                   />
                 ) : (
                   <ImageUploader
@@ -236,6 +264,7 @@ function AppRoutes() {
                                   <ScanImageThumbnail
                                     imageUri={scan.imageUri}
                                     shade={scan.predictedShade}
+                                    scanId={scan.id}
                                     size="md"
                                     onClick={() => setPreviewModalImage(scan)}
                                   />
@@ -261,6 +290,14 @@ function AppRoutes() {
 
                                 <td className="py-3.5 pr-2 text-right space-x-2">
                                   <button
+                                    onClick={() => setCompareModalScan(scan)}
+                                    className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 transition-colors"
+                                    title="Compare with another scan"
+                                  >
+                                    <Layers className="w-4 h-4" />
+                                  </button>
+
+                                  <button
                                     onClick={() => generateClinicalReportPDF({
                                       scanResult: scan,
                                       patient: { name: scan.patientName },
@@ -275,7 +312,7 @@ function AppRoutes() {
                                   <button
                                     onClick={() => handleDeleteScan(scan.id)}
                                     className="p-2 rounded-xl bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-600 dark:text-red-400 transition-colors"
-                                    title="Delete Scan Record"
+                                    title="Soft Delete Scan (Move to Recycle Bin)"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -300,7 +337,7 @@ function AppRoutes() {
             <Route path="/vita-guide" element={<VitaShadeGuide />} />
 
             {/* Settings */}
-            <Route path="/settings" element={<ProfileSettings />} />
+            <Route path="/settings" element={<ProfileSettings onReloadData={loadData} />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -373,71 +410,114 @@ function AppRoutes() {
         </div>
       )}
 
+      {/* Compare Scans Modal */}
+      {compareModalScan && (
+        <CompareScansModal
+          initialScan={compareModalScan}
+          allScans={scans}
+          onClose={() => setCompareModalScan(null)}
+        />
+      )}
+
     </div>
   );
 }
 
-export default function App() {
+function AppContent() {
+  const { currentUser, loading } = useAuth();
   const [authMode, setAuthMode] = useState('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
 
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AuthConsumer 
-          authMode={authMode}
-          setAuthMode={setAuthMode}
-          showForgotModal={showForgotModal}
-          setShowForgotModal={setShowForgotModal}
-          forgotEmail={forgotEmail}
-          setForgotEmail={setForgotEmail}
-        />
-      </AuthProvider>
-    </ThemeProvider>
-  );
-}
-
-function AuthConsumer({ 
-  authMode, 
-  setAuthMode, 
-  showForgotModal, 
-  setShowForgotModal, 
-  forgotEmail, 
-  setForgotEmail 
-}) {
-  const { currentUser } = useAuth();
-
-  if (!currentUser) {
+  // 1. Session verification loading state
+  if (loading) {
     return (
-      <>
-        {authMode === 'login' ? (
-          <LoginForm
-            onSwitchToRegister={() => setAuthMode('register')}
-            onForgotPassword={(email) => {
-              setForgotEmail(email);
-              setShowForgotModal(true);
-            }}
-          />
-        ) : (
-          <RegisterForm
-            onSwitchToLogin={() => setAuthMode('login')}
-          />
-        )}
-
-        {showForgotModal && (
-          <ForgotPasswordModal
-            initialEmail={forgotEmail}
-            onClose={() => setShowForgotModal(false)}
-          />
-        )}
-      </>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-portal-darkBg p-4">
+        <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-semibold text-portal-textMuted dark:text-portal-darkTextMuted tracking-wide">
+          Verifying ShadeScan AI Session...
+        </p>
+      </div>
     );
   }
 
+  // 2. Unauthenticated user -> Strictly render Sign In / Register routes ONLY
+  if (!currentUser) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route 
+            path="/register" 
+            element={
+              <RegisterForm 
+                prefilledEmail={authEmail}
+                onSwitchToLogin={(email, msg) => {
+                  if (email) setAuthEmail(email);
+                  if (msg) setAuthMessage(msg);
+                  setAuthMode('login');
+                }} 
+              />
+            } 
+          />
+          <Route 
+            path="*" 
+            element={
+              <>
+                {authMode === 'register' ? (
+                  <RegisterForm
+                    prefilledEmail={authEmail}
+                    onSwitchToLogin={(email, msg) => {
+                      if (email) setAuthEmail(email);
+                      if (msg) setAuthMessage(msg);
+                      setAuthMode('login');
+                    }}
+                  />
+                ) : (
+                  <LoginForm
+                    initialEmail={authEmail}
+                    authMessage={authMessage}
+                    onSwitchToRegister={(email) => {
+                      if (email) setAuthEmail(email);
+                      setAuthMessage('');
+                      setAuthMode('register');
+                    }}
+                    onForgotPassword={(email) => {
+                      setForgotEmail(email);
+                      setShowForgotModal(true);
+                    }}
+                  />
+                )}
+
+                {showForgotModal && (
+                  <ForgotPasswordModal
+                    initialEmail={forgotEmail}
+                    onClose={() => setShowForgotModal(false)}
+                  />
+                )}
+              </>
+            } 
+          />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
+  // 3. Authenticated user -> Access Protected App Routes (Dashboard)
   return (
     <BrowserRouter>
       <AppRoutes />
     </BrowserRouter>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

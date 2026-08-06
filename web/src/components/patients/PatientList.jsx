@@ -18,11 +18,19 @@ export default function PatientList({
   onSelectPatient 
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('all');
 
-  const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.phone && p.phone.includes(searchTerm))
-  );
+  const filteredPatients = patients
+    .filter(p => 
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.phone && p.phone.includes(searchTerm))
+    )
+    .sort((a, b) => {
+      if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+      if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'most-scans') return (b.scanCount || 0) - (a.scanCount || 0);
+      return 0;
+    });
 
   return (
     <div className="space-y-6">
@@ -47,8 +55,8 @@ export default function PatientList({
         </button>
       </div>
 
-      {/* Search Input Bar */}
-      <div className="bg-white dark:bg-portal-darkCard p-4 rounded-3xl border border-portal-border dark:border-portal-darkBorder shadow-sm">
+      {/* Search & Sort Controls */}
+      <div className="bg-white dark:bg-portal-darkCard p-4 rounded-3xl border border-portal-border dark:border-portal-darkBorder shadow-sm space-y-3">
         <div className="relative">
           <Search className="w-5 h-5 absolute left-3.5 top-3 text-portal-textMuted" />
           <input
@@ -59,6 +67,29 @@ export default function PatientList({
             className="w-full pl-11 pr-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
         </div>
+
+        {/* Sorting Chips */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs font-bold text-portal-textMuted mr-1">Sort:</span>
+          {[
+            { id: 'all', label: 'All' },
+            { id: 'name-asc', label: 'Name A-Z' },
+            { id: 'name-desc', label: 'Name Z-A' },
+            { id: 'most-scans', label: 'Most Scans' }
+          ].map(chip => (
+            <button
+              key={chip.id}
+              onClick={() => setSortBy(chip.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+                sortBy === chip.id
+                  ? 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                  : 'bg-slate-50 dark:bg-slate-900 text-portal-textMuted border border-portal-border dark:border-portal-darkBorder hover:bg-slate-100'
+              }`}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Patient Grid */}
@@ -68,7 +99,7 @@ export default function PatientList({
             <div
               key={patient.id}
               onClick={() => onSelectPatient(patient)}
-              className="group cursor-pointer p-6 rounded-3xl bg-white dark:bg-portal-darkCard border border-portal-border dark:border-portal-darkBorder hover:border-blue-500 dark:hover:border-blue-500 shadow-sm transition-all hover:shadow-md space-y-4"
+              className="group cursor-pointer p-5 rounded-3xl bg-white dark:bg-portal-darkCard border border-portal-border dark:border-portal-darkBorder hover:border-blue-500 dark:hover:border-blue-500 shadow-sm transition-all hover:shadow-md space-y-4"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -79,9 +110,9 @@ export default function PatientList({
                     <h3 className="font-extrabold text-base text-portal-textMain dark:text-portal-darkTextMain group-hover:text-blue-600 transition-colors">
                       {patient.name}
                     </h3>
-                    <p className="text-xs text-portal-textMuted dark:text-portal-darkTextMuted font-medium">
-                      {patient.gender || 'N/A'}, {patient.age ? `${patient.age} yrs` : 'Age N/A'}
-                    </p>
+                    <span className="inline-block px-2 py-0.5 mt-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 font-bold text-[11px]">
+                      {patient.age ? `${patient.age} yrs` : 'Age N/A'} • {patient.gender || 'Male'}
+                    </span>
                   </div>
                 </div>
 
@@ -94,24 +125,8 @@ export default function PatientList({
                 </button>
               </div>
 
-              {/* Phone & Notes snippet */}
-              <div className="space-y-1.5 text-xs text-portal-textMuted dark:text-portal-darkTextMuted border-t border-portal-border dark:border-portal-darkBorder pt-3">
-                {patient.phone && (
-                  <p className="flex items-center gap-2 font-medium">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{patient.phone}</span>
-                  </p>
-                )}
-                {patient.notes && (
-                  <p className="flex items-start gap-2 text-[11px] line-clamp-2">
-                    <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <span>{patient.notes}</span>
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400 pt-1">
-                <span>View Patient Scans</span>
+              <div className="flex items-center justify-between text-xs font-bold text-blue-600 dark:text-blue-400 pt-2 border-t border-portal-border dark:border-portal-darkBorder">
+                <span>View Profile & History</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>

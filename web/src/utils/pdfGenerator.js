@@ -161,15 +161,22 @@ export function generateClinicalReportPDF({ scanResult, patient, doctorInfo }) {
 
   // Footer Disclaimer & Signature
   doc.setDrawColor(226, 232, 240);
-  doc.line(14, 265, 196, 265);
+  doc.line(14, 260, 196, 260);
 
   doc.setFontSize(8);
-  doc.setTextColor(...mutedColor);
-  doc.setFont('helvetica', 'italic');
-  doc.text('Notice: ShadeScan AI provides clinical decision support. Final shade selection remains the responsibility of the practitioner.', 14, 272);
-
+  doc.setTextColor(...darkColor);
   doc.setFont('helvetica', 'bold');
-  doc.text('ShadeScan AI Web Clinical Portal - Verified Digital Record', 130, 278);
+  doc.text('CLINICAL DISCLAIMER:', 14, 266);
+
+  doc.setFontSize(7.5);
+  doc.setTextColor(...mutedColor);
+  doc.setFont('helvetica', 'normal');
+  doc.text('ShadeScan AI is an assistive decision-support tool intended for reference purposes only and is not a certified diagnostic device.', 14, 271);
+  doc.text('Final shade selection and restorative treatment planning remain the sole clinical responsibility of the licensed practitioner.', 14, 276);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ShadeScan AI Clinical Portal - Digital Verification', 125, 283);
 
   // Save PDF
   const filename = `ShadeScan_Report_${patient?.name ? patient.name.replace(/\s+/g, '_') : 'Patient'}_${mainShade}.pdf`;

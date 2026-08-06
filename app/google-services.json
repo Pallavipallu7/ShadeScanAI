@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "543866248276",
+    "firebase_url": "https://shadescan-ai-default-rtdb.firebaseio.com",
     "project_id": "shadescan-ai",
     "storage_bucket": "shadescan-ai.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.example.dental_shade_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "543866248276-6bk6v4se2a501j2pka1tj0guc688cala.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.dental_shade_app",
+            "certificate_hash": "3013d74d540d6b4c862c00be27472e4843738574"
+          }
+        },
+        {
+          "client_id": "543866248276-qjscu2epld9ccbd5he6g3ke1i2r1dsk0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCUuhDXnb9T2fUQHhdTQytXTMmmbQIF3w4"
@@ -20,7 +34,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "543866248276-qjscu2epld9ccbd5he6g3ke1i2r1dsk0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

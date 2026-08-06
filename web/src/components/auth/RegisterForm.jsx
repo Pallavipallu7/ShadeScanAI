@@ -1,67 +1,33 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  Scan, 
-  User, 
   Mail, 
   Lock, 
-  Phone, 
-  ShieldCheck, 
+  User,
   ArrowLeft, 
-  CheckCircle2, 
   AlertCircle,
-  Loader2
+  ArrowRight
 } from 'lucide-react';
 
-export default function RegisterForm({ onSwitchToLogin }) {
+export default function RegisterForm({ prefilledEmail = '', onSwitchToLogin }) {
   const { register } = useAuth();
 
   const [fullName, setFullName] = useState('');
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('Male');
-  const [username, setUsername] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(prefilledEmail);
   const [password, setPassword] = useState('');
-
-  // Email verification simulation
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [emailError, setEmailError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const handleVerifyEmail = () => {
-    setEmailError('');
-    if (!email) {
-      setEmailError('Please enter a valid email address.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setEmailError('Invalid email format.');
-      return;
-    }
-
-    setIsVerifying(true);
-    setTimeout(() => {
-      setIsVerifying(false);
-      setIsEmailVerified(true);
-    }, 1200);
-  };
+  const [verificationSent, setVerificationSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!fullName || !email || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password || !confirmPassword) {
       setError('Please fill in all required fields.');
-      return;
-    }
-
-    if (!isEmailVerified) {
-      setError('Please verify your email address before creating an account.');
       return;
     }
 
@@ -70,19 +36,24 @@ export default function RegisterForm({ onSwitchToLogin }) {
       return;
     }
 
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     try {
       setLoading(true);
-      await register({
-        fullName,
-        age: age || '30',
-        gender,
-        username: username || email.split('@')[0],
-        mobile: mobile || '+1 555-0199',
-        email,
-        password
-      });
+      await register(fullName, cleanEmail, password);
+      setVerificationSent(true);
     } catch (err) {
-      setError(err.message || 'Registration failed.');
+      console.error(err);
+      const code = err.code || '';
+      const msg = err.message || '';
+      if (code === 'auth/email-already-in-use' || msg.includes('already in use') || msg.includes('email-already-in-use')) {
+        onSwitchToLogin(cleanEmail, "An account already exists with this email. Please sign in.");
+      } else {
+        setError(msg || 'Failed to create account.');
+      }
     } finally {
       setLoading(false);
     }
@@ -90,19 +61,22 @@ export default function RegisterForm({ onSwitchToLogin }) {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-portal-darkBg p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-xl space-y-6">
+      <div className="w-full max-w-md space-y-6">
         
         {/* Header Navigation */}
         <div className="flex items-center justify-between">
           <button
-            onClick={onSwitchToLogin}
+            onClick={() => onSwitchToLogin()}
             className="flex items-center gap-2 text-sm font-semibold text-portal-textMuted dark:text-portal-darkTextMuted hover:text-portal-textMain dark:hover:text-portal-darkTextMain transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Login</span>
           </button>
           <div className="flex items-center gap-2">
-            <Scan className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2C8.5 2 6 4.5 6 8c0 3.5 1.5 8 3 11.5 1 2.3 2 2.5 3 2.5s2-.2 3-2.5C16.5 16 18 11.5 18 8c0-3.5-2.5-6-6-6z" />
+              <path d="M9 8c.5-1.5 1.5-2.5 3-2.5s2.5 1 3 2.5" />
+            </svg>
             <span className="font-bold text-sm text-portal-textMain dark:text-portal-darkTextMain">ShadeScan AI</span>
           </div>
         </div>
@@ -110,14 +84,34 @@ export default function RegisterForm({ onSwitchToLogin }) {
         {/* Card */}
         <div className="bg-white dark:bg-portal-darkCard p-6 sm:p-8 rounded-3xl border border-portal-border dark:border-portal-darkBorder shadow-xl shadow-slate-200/50 dark:shadow-none">
           
-          <div className="mb-6">
-            <h2 className="text-2xl font-extrabold text-portal-textMain dark:text-portal-darkTextMain">
-              Create Clinical Account
-            </h2>
-            <p className="text-xs text-portal-textMuted dark:text-portal-darkTextMuted mt-1">
-              Complete your profile to register your dental practice
-            </p>
-          </div>
+          {verificationSent ? (
+            <div className="text-center space-y-4 py-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center font-bold">
+                ✓
+              </div>
+              <h2 className="text-xl font-bold text-portal-textMain dark:text-portal-darkTextMain">
+                Account Created!
+              </h2>
+              <p className="text-xs text-portal-textMuted dark:text-portal-darkTextMuted leading-relaxed">
+                A verification link has been sent to <span className="font-bold text-portal-textMain dark:text-portal-darkTextMain">{email}</span>. Please verify your email before logging in.
+              </p>
+              <button
+                onClick={() => onSwitchToLogin(email)}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md transition-all"
+              >
+                Proceed to Sign In
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-extrabold text-portal-textMain dark:text-portal-darkTextMain">
+                  Create Account
+                </h2>
+                <p className="text-xs text-portal-textMuted dark:text-portal-darkTextMuted mt-1">
+                  Sign up with your email and password
+                </p>
+              </div>
 
           {error && (
             <div className="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 flex items-start gap-2.5 text-xs text-red-600 dark:text-red-400 font-medium">
@@ -128,194 +122,104 @@ export default function RegisterForm({ onSwitchToLogin }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             
-            {/* Personal Info Group */}
-            <div className="space-y-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                1. Personal Information
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                  Full Name *
-                </label>
-                <div className="relative">
-                  <User className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Dr. Sarah Jenkins"
-                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                    Age
-                  </label>
-                  <input
-                    type="number"
-                    value={age}
-                    onChange={(e) => setAge(e.target.value)}
-                    placeholder="34"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                    Gender
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="drsarahj"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                    Mobile Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
-                    <input
-                      type="tel"
-                      value={mobile}
-                      onChange={(e) => setMobile(e.target.value)}
-                      placeholder="+1 555-0199"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                    />
-                  </div>
-                </div>
+            {/* Full Name */}
+            <div>
+              <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1.5">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
+                />
               </div>
             </div>
 
-            {/* Account Credentials & Email Verification Group */}
-            <div className="space-y-3 pt-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                2. Account Access & Verification
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                  Email Address *
-                </label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Mail className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setIsEmailVerified(false);
-                        setEmailError('');
-                      }}
-                      placeholder="doctor@clinic.com"
-                      className={`w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium ${
-                        emailError ? 'border-red-500' : 'border-portal-border dark:border-portal-darkBorder'
-                      }`}
-                      required
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleVerifyEmail}
-                    disabled={isVerifying || isEmailVerified || !email}
-                    className={`px-4 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
-                      isEmailVerified
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50'
-                    }`}
-                  >
-                    {isVerifying ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : isEmailVerified ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Verified</span>
-                      </>
-                    ) : (
-                      <span>Verify</span>
-                    )}
-                  </button>
-                </div>
-
-                {emailError && (
-                  <p className="text-[11px] text-red-500 font-medium mt-1 pl-1">{emailError}</p>
-                )}
-                {isEmailVerified && (
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 pl-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Verification link sent. Email successfully validated.
-                  </p>
-                )}
+            {/* Email Address */}
+            <div>
+              <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1.5">
+                Email Address *
+              </label>
+              <div className="relative">
+                <Mail className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
+                  required
+                />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1">
-                  Password (6+ characters) *
-                </label>
-                <div className="relative">
-                  <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
-                    required
-                  />
-                </div>
+            {/* Password */}
+            <div>
+              <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1.5">
+                Password (6+ characters) *
+              </label>
+              <div className="relative">
+                <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-xs font-bold text-portal-textMain dark:text-portal-darkTextMain mb-1.5">
+                Confirm Password *
+              </label>
+              <div className="relative">
+                <Lock className="w-5 h-5 absolute left-3.5 top-3.5 text-portal-textMuted dark:text-portal-darkTextMuted" />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm your password"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-portal-border dark:border-portal-darkBorder focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm text-portal-textMain dark:text-portal-darkTextMain font-medium"
+                  required
+                />
               </div>
             </div>
 
             {/* Submit Button */}
-            <div className="pt-4">
+            <div className="pt-2">
               <button
                 type="submit"
-                disabled={loading || !isEmailVerified}
+                disabled={loading}
                 className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-60"
               >
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <span>Complete Account Registration</span>
+                  <>
+                    <span>Create Account</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
                 )}
               </button>
             </div>
 
           </form>
+            </>
+          )}
 
         </div>
 
         {/* Footer */}
         <p className="text-center text-xs text-portal-textMuted dark:text-portal-darkTextMuted">
-          Already have a clinical profile?{' '}
+          Already have an account?{' '}
           <button
             onClick={onSwitchToLogin}
             className="font-bold text-blue-600 dark:text-blue-400 hover:underline"

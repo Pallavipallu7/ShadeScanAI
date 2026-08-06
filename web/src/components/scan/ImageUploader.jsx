@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { getToothImageSvgDataUri, validateDentalImage } from '../../utils/shadeAnalyzer';
 import { 
   UploadCloud, 
   Camera, 
@@ -16,6 +17,8 @@ export default function ImageUploader({ onImageSelected }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showWebcam, setShowWebcam] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
 
   // Canvas brightness adjustment
   const [brightness, setBrightness] = useState(100);
@@ -25,9 +28,10 @@ export default function ImageUploader({ onImageSelected }) {
   const streamRef = useRef(null);
 
   const SAMPLE_IMAGES = [
-    { label: 'Sample Tooth A2', url: 'https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=500&q=80' },
-    { label: 'Sample Tooth B1', url: 'https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=500&q=80' },
-    { label: 'Sample Tooth C1', url: 'https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=500&q=80' }
+    { label: 'Sample Tooth A2 (Natural)', url: getToothImageSvgDataUri('A2') },
+    { label: 'Sample Tooth B1 (Bright Bleach)', url: getToothImageSvgDataUri('B1') },
+    { label: 'Sample Tooth C2 (Greyish Tone)', url: getToothImageSvgDataUri('C2') },
+    { label: 'Sample Tooth D3 (Warm Neutral)', url: getToothImageSvgDataUri('D3') }
   ];
 
   const handleFileChange = (e) => {
@@ -38,8 +42,9 @@ export default function ImageUploader({ onImageSelected }) {
   };
 
   const processFile = (file) => {
+    setValidationError('');
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (JPG, PNG, WEBP).');
+      setValidationError("No tooth detected. Please upload or capture a clear image of the patient's teeth.");
       return;
     }
     const reader = new FileReader();
@@ -60,6 +65,7 @@ export default function ImageUploader({ onImageSelected }) {
 
   const startWebcam = async () => {
     setShowWebcam(true);
+    setValidationError('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       streamRef.current = stream;
@@ -67,7 +73,7 @@ export default function ImageUploader({ onImageSelected }) {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      alert('Could not access camera. Please check camera permissions.');
+      setValidationError('Could not access camera. Please check camera permissions.');
       setShowWebcam(false);
     }
   };
@@ -88,17 +94,38 @@ export default function ImageUploader({ onImageSelected }) {
       ctx.drawImage(videoRef.current, 0, 0);
       const dataUrl = canvas.toDataURL('image/jpeg');
       setPreviewUrl(dataUrl);
+      setValidationError('');
       stopWebcam();
     }
   };
 
   const handleSelectSample = (sampleUrl) => {
     setPreviewUrl(sampleUrl);
+    setValidationError('');
   };
 
-  const handleContinueToAnalysis = () => {
-    if (previewUrl) {
+  const handleContinueToAnalysis = async () => {
+    if (!previewUrl) {
+      setValidationError("Please capture or upload a clear tooth image before analysis.");
+      return;
+    }
+
+    setValidationError('');
+    setIsValidating(true);
+
+    try {
+      const valResult = await validateDentalImage(previewUrl);
+      if (!valResult.isValid) {
+        setValidationError(valResult.message);
+        setIsValidating(false);
+        return;
+      }
+      // Validation passed -> proceed to analysis
       onImageSelected(previewUrl);
+    } catch (err) {
+      setValidationError("No tooth detected. Please upload or capture a clear image of the patient's teeth.");
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -114,6 +141,14 @@ export default function ImageUploader({ onImageSelected }) {
           Select or capture a clear photo of the patient's teeth for AI shade analysis
         </p>
       </div>
+
+      {/* Error Notification Banner */}
+      {validationError && (
+        <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-xs flex items-center gap-3 animate-in fade-in">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{validationError}</span>
+        </div>
+      )}
 
       {/* Main Upload / Camera / Preview Card */}
       <div className="bg-white dark:bg-portal-darkCard rounded-3xl border border-portal-border dark:border-portal-darkBorder shadow-xl p-6 sm:p-8 space-y-6">
@@ -178,9 +213,21 @@ export default function ImageUploader({ onImageSelected }) {
                 playsInline
                 className="w-full h-full object-cover"
               />
+              {/* Reference Card Zone Overlay */}
+              <div className="absolute top-4 left-4 border-2 border-dashed border-cyan-400 rounded-lg w-24 h-16 pointer-events-none flex items-center justify-center bg-cyan-950/40 backdrop-blur-xs">
+                <span className="text-cyan-300 font-extrabold text-[8px] uppercase tracking-wider text-center px-1">Reference Card</span>
+              </div>
+
+              {/* Tooth ROI Center Box */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="border-2 border-dashed border-amber-400 rounded-2xl w-36 h-36 flex items-center justify-center bg-amber-400/10">
+                  <span className="text-amber-300 font-extrabold text-[9px] uppercase tracking-wider">Tooth Target</span>
+                </div>
+              </div>
+
               <button
                 onClick={stopWebcam}
-                className="absolute top-3 right-3 p-2 rounded-full bg-black/60 text-white hover:bg-black"
+                className="absolute top-3 right-3 p-2 rounded-full bg-black/60 text-white hover:bg-black z-10"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -216,13 +263,28 @@ export default function ImageUploader({ onImageSelected }) {
                 </div>
               </div>
 
+              {/* Reference Card Calibration Guide Box */}
+              <div className="absolute top-4 left-4 border-2 border-dashed border-cyan-400 rounded-lg w-28 h-20 pointer-events-none flex items-center justify-center bg-cyan-950/40 backdrop-blur-xs">
+                <div className="text-cyan-300 font-extrabold text-[9px] px-1.5 py-0.5 text-center uppercase tracking-wider">
+                  Reference Card Zone
+                </div>
+              </div>
+
               <button
-                onClick={() => setPreviewUrl(null)}
-                className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 hover:bg-slate-900 text-white transition-colors"
+                onClick={() => { setPreviewUrl(null); setValidationError(''); }}
+                className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/80 hover:bg-slate-900 text-white transition-colors z-10"
                 title="Remove photo"
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Calibration Guide Banner */}
+            <div className="p-3.5 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 flex items-start gap-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 mt-1 shrink-0 animate-pulse" />
+              <p className="text-xs text-cyan-900 dark:text-cyan-200 font-semibold leading-relaxed">
+                <span className="font-extrabold">Color Calibration Guidance:</span> Position a neutral grey reference card or physical VITA shade tab within the top-left reference zone to enable automatic white-balance correction.
+              </p>
             </div>
 
             {/* Brightness Adjustment Slider */}
@@ -247,7 +309,7 @@ export default function ImageUploader({ onImageSelected }) {
             {/* Action Buttons */}
             <div className="flex items-center justify-between pt-2">
               <button
-                onClick={() => setPreviewUrl(null)}
+                onClick={() => { setPreviewUrl(null); setValidationError(''); }}
                 className="px-5 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-portal-textMain dark:text-portal-darkTextMain font-semibold text-sm transition-colors"
               >
                 Retake / Change Image
@@ -255,10 +317,17 @@ export default function ImageUploader({ onImageSelected }) {
 
               <button
                 onClick={handleContinueToAnalysis}
-                className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-transform active:scale-95"
+                disabled={!previewUrl || isValidating}
+                className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-sm shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               >
-                <Sparkles className="w-5 h-5 text-amber-300" />
-                <span>Run AI Shade Analysis</span>
+                {isValidating ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 text-amber-300" />
+                    <span>Run AI Shade Analysis</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

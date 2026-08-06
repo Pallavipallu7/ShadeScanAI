@@ -12,12 +12,22 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-export default function DashboardOverview({ patients = [], scans = [] }) {
+export default function DashboardOverview({ patients = [], scans = [], onSelectPatient }) {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
   const totalPatients = patients.length;
   const totalScans = scans.length;
+
+  const handlePatientClick = (scan) => {
+    const matchingPatient = patients.find(p => p.id === scan.patientId || (scan.patientName && p.name.toLowerCase() === scan.patientName.toLowerCase()));
+    if (matchingPatient && onSelectPatient) {
+      onSelectPatient(matchingPatient);
+      navigate('/patients');
+    } else {
+      navigate('/history');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -230,7 +240,12 @@ export default function DashboardOverview({ patients = [], scans = [] }) {
                       />
                     </td>
                     <td className="py-3 font-bold text-portal-textMain dark:text-portal-darkTextMain">
-                      {scan.patientName || 'Walk-in Patient'}
+                      <button
+                        onClick={() => handlePatientClick(scan)}
+                        className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left"
+                      >
+                        {scan.patientName || 'Walk-in Patient'}
+                      </button>
                     </td>
                     <td className="py-3">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-extrabold text-xs border border-blue-200 dark:border-blue-800">
@@ -245,7 +260,7 @@ export default function DashboardOverview({ patients = [], scans = [] }) {
                     </td>
                     <td className="py-3 pr-2 text-right">
                       <button
-                        onClick={() => navigate('/history')}
+                        onClick={() => handlePatientClick(scan)}
                         className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-semibold text-portal-textMain dark:text-portal-darkTextMain transition-colors"
                       >
                         View Details

@@ -1,5 +1,9 @@
 package com.example.dental_shade_app
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -93,6 +97,8 @@ fun LoginScreen(
     initialEmail: String,
     initialPassword: String,
     initialRememberMe: Boolean,
+    errorMessage: String? = null,
+    isLoading: Boolean = false,
     onLogin: (String, String, Boolean) -> Unit,
     onGoogleLogin: () -> Unit,
     onForgotPassword: (String) -> Unit,
@@ -111,59 +117,97 @@ fun LoginScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(28.dp))
         
+        // App Logo
         Surface(
-            modifier = Modifier.size(80.dp),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.size(88.dp),
+            shape = RoundedCornerShape(28.dp),
             color = PortalAccentLight
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    Icons.Default.SettingsSuggest,
-                    contentDescription = null,
+                    Icons.Default.MedicalServices,
+                    contentDescription = "ShadeScan AI Tooth Logo",
                     tint = PortalAccent,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(52.dp)
                 )
             }
         }
         
         Spacer(modifier = Modifier.height(16.dp))
+        
+        // Welcome Message
         Text(
             text = "ShadeScan AI",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = 30.sp,
+            fontWeight = FontWeight.ExtraBold,
             color = PortalTextMain
         )
         Text(
-            text = "Clinical Portal Login",
-            fontSize = 14.sp,
-            color = PortalTextMuted
+            text = "Clinical Tooth Shade Intelligence Portal",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = PortalTextMuted,
+            textAlign = TextAlign.Center
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(28.dp))
         
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = PortalCardBg),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Text(
-                    text = "Welcome Back",
+                    text = "Welcome Back, Doctor",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = PortalTextMain
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Sign in with your email and password",
+                    fontSize = 12.sp,
+                    color = PortalTextMuted
+                )
                 
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Error Banner
+                AnimatedVisibility(
+                    visible = errorMessage != null,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    errorMessage?.let {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            color = Color(0xFFFFEBEE),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFFCDD2))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(it, color = Color(0xFFD32F2F), fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 17.sp)
+                            }
+                        }
+                    }
+                }
+                
+                // Secondary: Email Field
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email Address") },
+                    enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = PortalTextMuted) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PortalAccent,
@@ -171,14 +215,16 @@ fun LoginScreen(
                     )
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 
+                // Secondary: Password Field
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Password") },
+                    enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = PortalTextMuted) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -197,7 +243,7 @@ fun LoginScreen(
                 )
                 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -205,56 +251,65 @@ fun LoginScreen(
                         Checkbox(
                             checked = rememberMe,
                             onCheckedChange = { rememberMe = it },
+                            enabled = !isLoading,
                             colors = CheckboxDefaults.colors(checkedColor = PortalAccent)
                         )
-                        Text("Remember Me", fontSize = 14.sp, color = PortalTextMuted)
+                        Text("Remember Me", fontSize = 13.sp, color = PortalTextMuted, fontWeight = FontWeight.Medium)
                     }
-                    TextButton(onClick = { onForgotPassword(email) }) {
-                        Text("Forgot?", color = PortalAccent, fontWeight = FontWeight.Bold)
+                    TextButton(
+                        onClick = { onForgotPassword(email) },
+                        enabled = !isLoading
+                    ) {
+                        Text("Forgot Password?", color = PortalAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 
+                // Primary Sign In Button
                 Button(
                     onClick = { onLogin(email, password, rememberMe) },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PortalDark)
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PortalAccent,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                 ) {
-                    Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                    Text(
+                        text = if (isLoading) "Signing In..." else "Sign In",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HorizontalDivider(modifier = Modifier.weight(1f), color = PortalDivider)
-            Text("  OR  ", color = PortalTextMuted, fontSize = 12.sp)
-            HorizontalDivider(modifier = Modifier.weight(1f), color = PortalDivider)
-        }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        OutlinedButton(
-            onClick = onGoogleLogin,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, PortalDivider),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = PortalTextMain)
+        // Create Account Link
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 16.dp)
         ) {
-            Icon(Icons.Default.AccountCircle, null, tint = PortalAccent)
-            Spacer(modifier = Modifier.width(12.dp))
-            Text("Sign in with Google", fontWeight = FontWeight.Medium)
-        }
-        
-        Spacer(modifier = Modifier.weight(1f))
-        
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 16.dp)) {
-            Text("New to ShadeScan?", color = PortalTextMuted)
-            TextButton(onClick = onSignUpClick) {
-                Text("Create Account", color = PortalAccent, fontWeight = FontWeight.Bold)
+            Text("New to ShadeScan AI?", color = PortalTextMuted, fontSize = 14.sp)
+            TextButton(
+                onClick = onSignUpClick,
+                enabled = !isLoading
+            ) {
+                Text("Create Account", color = PortalAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -262,24 +317,17 @@ fun LoginScreen(
 
 @Composable
 fun SignUpScreen(
+    initialEmail: String = "",
     onBack: () -> Unit,
-    onSignUp: (String, String, String, String, String, String, String) -> Unit,
+    onSignUp: (String, String, String) -> Unit,
     onLoginClick: () -> Unit
 ) {
     var fullName by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("") }
-    var gender by remember { mutableStateOf("Male") }
-    var username by remember { mutableStateOf("") }
-    var mobile by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    var email by remember(initialEmail) { mutableStateOf(initialEmail) }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-
-    // Email Verification State
-    var isEmailVerified by remember { mutableStateOf(false) }
-    var isVerifying by remember { mutableStateOf(false) }
-    var emailError by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -300,8 +348,8 @@ fun SignUpScreen(
             modifier = Modifier.padding(top = 8.dp)
         )
         Text(
-            text = "Complete your clinical profile",
-            fontSize = 16.sp,
+            text = "Sign up with your email and password",
+            fontSize = 15.sp,
             color = PortalTextMuted
         )
         
@@ -314,148 +362,75 @@ fun SignUpScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
-                Text("Personal Information", fontWeight = FontWeight.Bold, color = PortalTextMain, fontSize = 18.sp)
-                Spacer(modifier = Modifier.height(16.dp))
                 
-                OutlinedTextField(
-                    value = fullName,
-                    onValueChange = { fullName = it },
-                    label = { Text("Full Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = age,
-                        onValueChange = { age = it },
-                        label = { Text("Age") },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1.2f)
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(PortalBg)
-                            .clickable { gender = if (gender == "Male") "Female" else "Male" }
-                            .padding(horizontal = 16.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text("Gender: $gender", color = PortalTextMain, fontSize = 14.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text("Username") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = mobile,
-                    onValueChange = { mobile = it },
-                    label = { Text("Mobile Number") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("Account Access", fontWeight = FontWeight.Bold, color = PortalTextMain, fontSize = 18.sp)
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = email,
-                            onValueChange = { 
-                                email = it
-                                isEmailVerified = false
-                                emailError = null
-                            },
-                            label = { Text("Email Address") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            isError = emailError != null,
-                            enabled = !isEmailVerified && !isVerifying,
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
-                        )
-                        
-                        Button(
-                            onClick = {
-                                if (email.isBlank()) {
-                                    emailError = "Email cannot be empty"
-                                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                                    emailError = "Invalid email format"
-                                } else {
-                                    scope.launch {
-                                        isVerifying = true
-                                        delay(2000) // Simulation delay
-                                        isVerifying = false
-                                        isEmailVerified = true
-                                    }
-                                }
-                            },
-                            modifier = Modifier.height(56.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            enabled = !isEmailVerified && !isVerifying && email.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isEmailVerified) Color(0xFF10B981) else PortalAccent
-                            )
+                // Error Banner
+                AnimatedVisibility(
+                    visible = errorMessage != null,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    errorMessage?.let {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            color = Color(0xFFFFEBEE),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFFCDD2))
                         ) {
-                            if (isVerifying) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Text(if (isEmailVerified) "Verified" else "Verify")
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(it, color = Color(0xFFD32F2F), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
-                    
-                    if (emailError != null) {
-                        Text(
-                            text = emailError ?: "",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-                        )
-                    }
-                    
-                    if (isEmailVerified) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(start = 16.dp, top = 8.dp)
-                        ) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Verified", color = Color(0xFF10B981), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Verification email sent successfully.", color = PortalTextMuted, fontSize = 12.sp)
-                        }
-                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                // Full Name Field
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { 
+                        fullName = it
+                        errorMessage = null
+                    },
+                    label = { Text("Full Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = PortalTextMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
+                )
                 
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Email Field
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { 
+                        email = it
+                        errorMessage = null
+                    },
+                    label = { Text("Email Address") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = PortalTextMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
+                )
+                
+                Spacer(modifier = Modifier.height(14.dp))
+                
+                // Password Field
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password (6+ chars)") },
+                    onValueChange = { 
+                        password = it
+                        errorMessage = null
+                    },
+                    label = { Text("Password (min 6 characters)") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = PortalTextMuted) },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -465,14 +440,41 @@ fun SignUpScreen(
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
                 )
                 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Confirm Password Field
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { 
+                        confirmPassword = it
+                        errorMessage = null
+                    },
+                    label = { Text("Confirm Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = PortalTextMuted) },
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PortalAccent, unfocusedBorderColor = PortalDivider)
+                )
+                
+                Spacer(modifier = Modifier.height(28.dp))
 
                 Button(
-                    onClick = { onSignUp(fullName, age, gender, username, mobile, email, password) },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PortalDark),
-                    enabled = fullName.isNotBlank() && isEmailVerified && password.length >= 6
+                    onClick = { 
+                        if (email.isBlank()) {
+                            errorMessage = "Please enter your email address."
+                        } else if (password.length < 6) {
+                            errorMessage = "Password must be at least 6 characters."
+                        } else if (password != confirmPassword) {
+                            errorMessage = "Passwords do not match."
+                        } else {
+                            onSignUp(fullName, email, password)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PortalAccent, contentColor = Color.White),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                 ) {
                     Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }

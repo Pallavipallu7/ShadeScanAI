@@ -17,7 +17,7 @@ export default function PatientDetail({
   onEditPatient, 
   onNewScanForPatient 
 }) {
-  const patientScans = scans.filter(s => s.patientId === patient.id);
+  const patientScans = scans.filter(s => Boolean(s.patientId) && s.patientId === patient.id);
 
   const handleExportPDF = (scan) => {
     generateClinicalReportPDF({

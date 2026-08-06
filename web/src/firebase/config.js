@@ -1,12 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { 
   getAuth, 
-  GoogleAuthProvider, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  sendEmailVerification,
   signOut as firebaseSignOut,
-  signInWithPopup,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  updatePassword,
+  fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import { 
   getDatabase, 
@@ -33,18 +34,18 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const rtdb = getDatabase(app, firebaseConfig.databaseURL);
-const googleProvider = new GoogleAuthProvider();
 
 export { 
   app, 
   auth, 
   rtdb, 
-  googleProvider, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
+  sendEmailVerification,
   firebaseSignOut, 
-  signInWithPopup,
   sendPasswordResetEmail,
+  updatePassword,
+  fetchSignInMethodsForEmail,
   ref, 
   get, 
   set, 

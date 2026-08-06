@@ -13,6 +13,9 @@
     <string name="fingerprint_login">Fingerprint Login</string>
     <string name="face_id_login">Face ID Login</string>
 
+    <!-- Google OAuth Client ID -->
+    <string name="default_web_client_id">543866248276-qjscu2epld9ccbd5he6g3ke1i2r1dsk0.apps.googleusercontent.com</string>
+
     <!-- Dashboard Strings -->
     <string name="clinical_portal">CLINICAL PORTAL</string>
     <string name="default_doctor_name">Dr. Sarah Miller</string>
