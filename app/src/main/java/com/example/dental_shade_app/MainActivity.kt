@@ -24,15 +24,23 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // If a session already exists, skip login and go straight to the dashboard
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            startActivity(Intent(this, DashboardActivity::class.java))
+            finish()
+            return
+        }
+
+        // No session — show splash briefly then go to login
         setContent {
             ShadeScanTheme {
-                var isLoading by remember { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
-                    // Always direct to LoginActivity so user is prompted for login credentials
                     val intent = Intent(this@MainActivity, LoginActivity::class.java)
                     startActivity(intent)
                     finish()
                 }
+                SplashScreen()
             }
         }
     }

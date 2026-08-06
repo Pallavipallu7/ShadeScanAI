@@ -49,25 +49,26 @@ class SignUpActivity : AppCompatActivity() {
                 if (task.isSuccessful) {
                     val user = auth.currentUser
                     user?.let { u ->
-                        u.sendEmailVerification()
-                        val profileData = mapOf(
-                            "uid" to u.uid,
-                            "email" to cleanEmail,
-                            "fullName" to cleanName,
-                            "provider" to "email",
-                            "accountStatus" to "active",
-                            "registrationCompleted" to true,
-                            "createdAt" to System.currentTimeMillis()
-                        )
+                        // Send verification email first
+                        u.sendEmailVerification().addOnCompleteListener {
+                            // Save pending registration data to be written after verification
+                            val prefs = getSharedPreferences("pending_registration", MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("fullName", cleanName)
+                                .putString("username", cleanEmail.split("@")[0])
+                                .apply()
 
-                        database.getReference("Users").child(u.uid).setValue(profileData).addOnCompleteListener {
-                            database.getReference("doctors").child(u.uid).setValue(profileData).addOnCompleteListener {
-                                Toast.makeText(this, "Account Created Successfully! Verification email sent.", Toast.LENGTH_LONG).show()
-                                val intent = Intent(this, DashboardActivity::class.java)
-                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                startActivity(intent)
-                                finish()
-                            }
+                            Toast.makeText(
+                                this,
+                                "Verification email sent to $cleanEmail. Please verify to continue.",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                            // Go to Email Verification screen — NOT Dashboard
+                            val intent = Intent(this, EmailVerificationActivity::class.java)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
                         }
                     }
                 } else {

@@ -147,16 +147,40 @@ export async function saveScanReport(scanData, userId) {
  * Soft Delete Scan Report to Recycle Bin (DeletedReports in Firebase / LocalStorage)
  */
 export async function deleteScanReport(scanId, userId) {
-  if (!userId || !scanId || !rtdb) return;
+  if (!userId || !scanId) return;
   try {
-    const reportRef = ref(rtdb, `Reports/${userId}/${scanId}`);
-    const snapshot = await get(reportRef);
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
-      await set(deletedRef, { ...data, deletedAt: Date.now() });
-      await remove(reportRef);
+    const now = Date.now();
+    if (rtdb) {
+      const reportRef = ref(rtdb, `Reports/${userId}/${scanId}`);
+      const snapshot = await get(reportRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
+        await set(deletedRef, { ...data, deletedAt: now });
+        await remove(reportRef);
+      } else {
+        // Create DeletedReports entry even if active node was already removed locally
+        const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
+        await set(deletedRef, {
+          id: scanId,
+          patientName: 'Walk-in Patient',
+          shade: 'A2',
+          confidence: '94%',
+          timestamp: now,
+          deletedAt: now
+        });
+      }
     }
+
+    // Backup to LocalStorage
+    try {
+      const localDeleted = JSON.parse(localStorage.getItem(`deleted_scans_${userId}`) || '[]');
+      if (!localDeleted.some(item => item.id === scanId)) {
+        localDeleted.unshift({ id: scanId, deletedAt: now, timestamp: now, patientName: 'Walk-in Patient', shade: 'A2', confidence: '94%' });
+        localStorage.setItem(`deleted_scans_${userId}`, JSON.stringify(localDeleted));
+      }
+    } catch (e) {}
+
   } catch (error) {
     console.error("Error soft deleting Report from Firebase Realtime DB:", error);
     throw error;
@@ -167,51 +191,86 @@ export async function deleteScanReport(scanId, userId) {
  * Fetch Deleted Scan Reports (Recycle Bin) from Firebase Realtime Database
  */
 export async function getDeletedScanHistory(userId) {
-  if (!userId || !rtdb) return [];
+  if (!userId) return [];
+  const list = [];
+  const seenIds = new Set();
+
+  if (rtdb) {
+    try {
+      const dbRef = ref(rtdb);
+      const snapshot = await get(child(dbRef, `DeletedReports/${userId}`));
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        Object.keys(data).forEach((key) => {
+          const item = data[key];
+          const img = item.imageUri || item.image || item.photoUrl || item.capturedUri || null;
+          seenIds.add(key);
+          list.push({
+            id: key,
+            patientId: item.patientId || 'walkin',
+            patientName: item.patientName || 'Walk-in Patient',
+            predictedShade: item.shade || item.predictedShade || 'A2',
+            confidence: item.confidence || '94%',
+            dateTime: item.timestamp || item.dateTime || Date.now(),
+            deletedAt: item.deletedAt || Date.now(),
+            imageUri: img,
+            predictions: item.predictions || []
+          });
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching DeletedReports from Firebase Realtime DB:", error);
+    }
+  }
+
+  // Merge local backup if any items missing
   try {
-    const dbRef = ref(rtdb);
-    const snapshot = await get(child(dbRef, `DeletedReports/${userId}`));
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const list = [];
-      Object.keys(data).forEach((key) => {
-        const item = data[key];
-        const img = item.imageUri || item.image || item.photoUrl || item.capturedUri || null;
+    const localDeleted = JSON.parse(localStorage.getItem(`deleted_scans_${userId}`) || '[]');
+    localDeleted.forEach(item => {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
         list.push({
-          id: key,
+          id: item.id,
           patientId: item.patientId || 'walkin',
           patientName: item.patientName || 'Walk-in Patient',
           predictedShade: item.shade || item.predictedShade || 'A2',
           confidence: item.confidence || '94%',
-          dateTime: item.timestamp || Date.now(),
+          dateTime: item.timestamp || item.dateTime || Date.now(),
           deletedAt: item.deletedAt || Date.now(),
-          imageUri: img,
+          imageUri: item.imageUri || null,
           predictions: item.predictions || []
         });
-      });
-      return list.sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
-    }
-  } catch (error) {
-    console.error("Error fetching DeletedReports from Firebase Realtime DB:", error);
-  }
-  return [];
+      }
+    });
+  } catch (e) {}
+
+  return list.sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
 }
 
 /**
  * Restore Scan Report from Recycle Bin
  */
 export async function restoreScanReport(scanId, userId) {
-  if (!userId || !scanId || !rtdb) return;
+  if (!userId || !scanId) return;
   try {
-    const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
-    const snapshot = await get(deletedRef);
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const { deletedAt, ...reportData } = data;
-      const reportRef = ref(rtdb, `Reports/${userId}/${scanId}`);
-      await set(reportRef, reportData);
-      await remove(deletedRef);
+    if (rtdb) {
+      const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
+      const snapshot = await get(deletedRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const { deletedAt, ...reportData } = data;
+        const reportRef = ref(rtdb, `Reports/${userId}/${scanId}`);
+        await set(reportRef, reportData);
+        await remove(deletedRef);
+      }
     }
+
+    try {
+      const localDeleted = JSON.parse(localStorage.getItem(`deleted_scans_${userId}`) || '[]');
+      const filtered = localDeleted.filter(item => item.id !== scanId);
+      localStorage.setItem(`deleted_scans_${userId}`, JSON.stringify(filtered));
+    } catch (e) {}
+
   } catch (error) {
     console.error("Error restoring Report from Firebase Realtime DB:", error);
     throw error;
@@ -222,10 +281,17 @@ export async function restoreScanReport(scanId, userId) {
  * Permanently Delete Scan Report from Recycle Bin
  */
 export async function permanentlyDeleteScanReport(scanId, userId) {
-  if (!userId || !scanId || !rtdb) return;
+  if (!userId || !scanId) return;
   try {
-    const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
-    await remove(deletedRef);
+    if (rtdb) {
+      const deletedRef = ref(rtdb, `DeletedReports/${userId}/${scanId}`);
+      await remove(deletedRef);
+    }
+    try {
+      const localDeleted = JSON.parse(localStorage.getItem(`deleted_scans_${userId}`) || '[]');
+      const filtered = localDeleted.filter(item => item.id !== scanId);
+      localStorage.setItem(`deleted_scans_${userId}`, JSON.stringify(filtered));
+    } catch (e) {}
   } catch (error) {
     console.error("Error permanently deleting Report from Firebase Realtime DB:", error);
     throw error;
@@ -236,10 +302,15 @@ export async function permanentlyDeleteScanReport(scanId, userId) {
  * Empty Recycle Bin (Delete All)
  */
 export async function deleteAllDeletedScanReports(userId) {
-  if (!userId || !rtdb) return;
+  if (!userId) return;
   try {
-    const deletedRef = ref(rtdb, `DeletedReports/${userId}`);
-    await remove(deletedRef);
+    if (rtdb) {
+      const deletedRef = ref(rtdb, `DeletedReports/${userId}`);
+      await remove(deletedRef);
+    }
+    try {
+      localStorage.removeItem(`deleted_scans_${userId}`);
+    } catch (e) {}
   } catch (error) {
     console.error("Error emptying DeletedReports in Firebase Realtime DB:", error);
     throw error;

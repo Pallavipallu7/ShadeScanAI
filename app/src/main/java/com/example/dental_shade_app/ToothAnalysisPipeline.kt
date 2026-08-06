@@ -3,10 +3,15 @@ package com.example.dental_shade_app
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Rect
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import kotlin.math.abs
 
 enum class PipelineStage(val stageName: String) {
@@ -51,6 +56,9 @@ sealed class PipelineState {
 class ToothAnalysisPipeline(private val context: Context) {
 
     private val classifier = ToothShadeClassifier(context)
+    private val labeler = ImageLabeling.getClient(ImageLabelerOptions.Builder()
+        .setConfidenceThreshold(0.5f)
+        .build())
 
     fun runPipeline(inputBitmap: Bitmap): Flow<PipelineState> = flow {
         val steps = PipelineStage.values().map { stage ->
@@ -65,22 +73,93 @@ class ToothAnalysisPipeline(private val context: Context) {
             emit(PipelineState.Progress(steps.toList(), activeIdx))
         }
 
-        // 1. Detecting tooth...
-        updateStep(0, StepStatus.RUNNING, "Locating tooth region of interest...")
+        // STEP 0: ML Kit hard gate — reject non-tooth images before any pixel analysis
+        updateStep(0, StepStatus.RUNNING, "Checking if image contains teeth...")
         emitProgress(0)
-        kotlinx.coroutines.delay(300)
 
-        val toothRect = detectToothBoundingBox(inputBitmap)
-        if (toothRect == null || toothRect.width() < 30 || toothRect.height() < 30) {
-            updateStep(0, StepStatus.FAILED, "No tooth detected")
+        val toothLabels = setOf(
+            "tooth", "teeth", "mouth", "dentistry", "dentist",
+            "smile", "human mouth", "jaw", "gums", "oral",
+            "incisor", "molar", "canine", "enamel", "crown"
+        )
+
+        val mlKitResult = suspendCancellableCoroutine<Pair<Boolean, String>> { cont ->
+            val image = InputImage.fromBitmap(inputBitmap, 0)
+            labeler.process(image)
+                .addOnSuccessListener { labels ->
+                    val labelMap = labels.associate { it.text.lowercase() to it.confidence }
+
+                    // Check for any tooth-related label
+                    val toothMatch = labelMap.entries.firstOrNull { entry ->
+                        toothLabels.any { kw -> entry.key.contains(kw) } && entry.value >= 0.55f
+                    }
+
+                    // Face detected without teeth = always invalid
+                    val faceLabels = setOf("face", "nose", "eye", "ear", "forehead", "cheek",
+                        "skin", "hair", "person", "selfie", "portrait", "head", "neck", "lip")
+                    val hasFace = labelMap.entries.any { entry ->
+                        faceLabels.any { kw -> entry.key.contains(kw) } && entry.value >= 0.55f
+                    }
+
+                    // Check for other strong reject labels (non-face non-tooth objects)
+                    val otherRejectLabels = setOf(
+                        "laptop", "computer", "keyboard", "table", "desk",
+                        "furniture", "electronics", "food", "plant", "vehicle",
+                        "sky", "building", "animal", "cat", "dog", "hand",
+                        "finger", "wall", "floor", "ceiling",
+                        "paper", "book", "phone", "bottle", "cup", "cloth",
+                        "shirt", "glasses"
+                    )
+                    val hasOtherReject = labelMap.entries.any { entry ->
+                        otherRejectLabels.any { kw -> entry.key.contains(kw) } && entry.value >= 0.60f
+                    }
+
+                    val allLabelsText = labels.take(5).joinToString { "${it.text}(${String.format("%.0f", it.confidence * 100)}%)" }
+                    android.util.Log.d("ToothGate", "ML Kit labels: $allLabelsText | hasFace=$hasFace | toothMatch=${toothMatch?.key}")
+
+                    when {
+                        // Tooth detected — always allow regardless of face
+                        toothMatch != null -> cont.resume(Pair(true, "Teeth detected: ${toothMatch.key} (${String.format("%.0f", toothMatch.value * 100)}%)"))
+                        // Face without teeth — ALWAYS reject
+                        hasFace -> cont.resume(Pair(false, "No teeth visible. Please open your mouth and show your teeth clearly for accurate shade analysis."))
+                        // Non-tooth object (laptop, table, etc.)
+                        hasOtherReject -> cont.resume(Pair(false, "Image does not contain teeth. Please capture a clear photo of the patient's teeth."))
+                        // No recognizable label — let pixel analysis decide
+                        else -> cont.resume(Pair(true, "No strong label — proceeding to pixel analysis"))
+                    }
+                }
+                .addOnFailureListener {
+                    // If ML Kit fails, allow pipeline to continue with pixel check
+                    cont.resume(Pair(true, "ML Kit unavailable, continuing with pixel analysis"))
+                }
+        }
+
+        if (!mlKitResult.first) {
+            updateStep(0, StepStatus.FAILED, mlKitResult.second)
             emit(PipelineState.Error(
-                errorMessage = "No tooth detected. Please upload or capture a clear image of the patient's teeth.",
+                errorMessage = mlKitResult.second,
                 steps = steps.toList(),
                 failedStage = PipelineStage.DETECTING_TOOTH
             ))
             return@flow
         }
-        updateStep(0, StepStatus.COMPLETED, "Tooth region detected")
+        updateStep(0, StepStatus.COMPLETED, mlKitResult.second)
+
+        // 1. Pixel-based tooth bounding box detection
+        emitProgress(0)
+        kotlinx.coroutines.delay(200)
+
+        val toothRect = detectToothBoundingBox(inputBitmap)
+        if (toothRect == null || toothRect.width() < 30 || toothRect.height() < 30) {
+            updateStep(0, StepStatus.FAILED, "Tooth region not locatable in frame")
+            emit(PipelineState.Error(
+                errorMessage = "Could not locate tooth region. Please align the tooth clearly in the frame and try again.",
+                steps = steps.toList(),
+                failedStage = PipelineStage.DETECTING_TOOTH
+            ))
+            return@flow
+        }
+        updateStep(0, StepStatus.COMPLETED, "Tooth region located")
 
         // 2. Cropping tooth...
         updateStep(1, StepStatus.RUNNING, "Extracting tooth region...")
@@ -195,6 +274,7 @@ class ToothAnalysisPipeline(private val context: Context) {
         var minY = height
         var maxY = 0
         var toothPixelCount = 0
+        var totalSampledCount = 0
 
         val step = 2
         for (y in 0 until height step step) {
@@ -205,10 +285,17 @@ class ToothAnalysisPipeline(private val context: Context) {
                 val b = pixel and 0xFF
 
                 val brightness = (r + g + b) / 3
-                val isIvory = r >= g && g >= b - 25 && brightness in 75..248
-                val isLowSat = abs(r - g) < 50 && abs(g - b) < 55
+                totalSampledCount++
 
-                if (isIvory && isLowSat) {
+                // Tightened: must be bright ivory/white, low saturation, not reddish skin tone
+                val isIvory = r >= g && g >= (b - 20) && brightness in 100..250
+                val isLowSat = abs(r - g) < 35 && abs(g - b) < 40 && abs(r - b) < 50
+                // Exclude reddish/pinkish skin tones: skin has high R, lower B
+                // Also exclude lips (high R-B difference even at lower brightness)
+                val isSkin = (r > 140 && (r - b) > 30 && g < 210) ||
+                             (r > 120 && (r - b) > 50)  // lips / darker skin
+
+                if (isIvory && isLowSat && !isSkin) {
                     toothPixelCount++
                     if (x < minX) minX = x
                     if (x > maxX) maxX = x
@@ -218,10 +305,10 @@ class ToothAnalysisPipeline(private val context: Context) {
             }
         }
 
-        val totalSampled = (width / step) * (height / step)
-        val enamelRatio = if (totalSampled > 0) toothPixelCount.toFloat() / totalSampled else 0f
+        val enamelRatio = if (totalSampledCount > 0) toothPixelCount.toFloat() / totalSampledCount else 0f
 
-        if (enamelRatio >= 0.12f) {
+        // Raised threshold to 0.22 — face/skin rarely reach this without actual teeth
+        if (enamelRatio >= 0.22f) {
             val padX = ((maxX - minX) * 0.10f).toInt().coerceAtLeast(10)
             val padY = ((maxY - minY) * 0.10f).toInt().coerceAtLeast(10)
 
@@ -233,7 +320,6 @@ class ToothAnalysisPipeline(private val context: Context) {
             return Rect(left, top, right, bottom)
         }
 
-        // Return null if tooth enamel ratio < 12%
         return null
     }
 
@@ -284,9 +370,11 @@ class ToothAnalysisPipeline(private val context: Context) {
                 val brightness = (r + g + b) / 3
                 totalLum += brightness
 
-                val isIvory = r >= g && g >= b - 25 && brightness in 75..248
-                val isLowSat = abs(r - g) < 50 && abs(g - b) < 60
-                if (isIvory && isLowSat) {
+                // Tightened enamel detection — must be bright ivory, low sat, not skin-tone
+                val isIvory = r >= g && g >= (b - 20) && brightness in 100..250
+                val isLowSat = abs(r - g) < 35 && abs(g - b) < 40
+                val isSkin = r > 150 && (r - b) > 40 && g < 200
+                if (isIvory && isLowSat && !isSkin) {
                     enamelCount++
                 }
 
@@ -309,8 +397,9 @@ class ToothAnalysisPipeline(private val context: Context) {
         if (sharpness < 2.0) {
             return QualityEvaluation(false, 45, "Blurry", "Image is too blurry. Hold steady and focus clearly on the tooth.")
         }
-        if (enamelRatio < 0.06) {
-            return QualityEvaluation(false, 30, "No Tooth Detected", "Tooth region is not visible clearly. Please align central tooth inside camera frame.")
+        // Raised threshold from 0.06 to 0.10
+        if (enamelRatio < 0.10) {
+            return QualityEvaluation(false, 30, "No Tooth Detected", "Tooth region is not visible clearly. Please align the central tooth inside the camera frame.")
         }
 
         val qualityScore = ((sharpness * 6).coerceAtMost(40.0) + (1.0 - abs(avgBrightness - 140) / 140.0) * 60).toInt().coerceIn(70, 98)
@@ -379,5 +468,6 @@ class ToothAnalysisPipeline(private val context: Context) {
 
     fun close() {
         classifier.close()
+        labeler.close()
     }
 }

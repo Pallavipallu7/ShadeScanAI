@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.*
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -66,52 +67,52 @@ class LoginActivity : AppCompatActivity() {
         loginErrorMessage = null
         isAuthLoading = true
 
-        // First check if email exists in Firebase Authentication
-        auth.fetchSignInMethodsForEmail(cleanEmail)
-            .addOnCompleteListener { fetchTask ->
-                if (fetchTask.isSuccessful) {
-                    val signInMethods = fetchTask.result?.signInMethods
-                    if (signInMethods == null || signInMethods.isEmpty()) {
-                        // Email does NOT exist in Firebase Auth -> Redirect to Sign Up page automatically
-                        isAuthLoading = false
-                        val intent = Intent(this, SignUpActivity::class.java).apply {
-                            putExtra("prefill_email", cleanEmail)
+        // Attempt sign-in directly — never auto-redirect to SignUp from here
+        auth.signInWithEmailAndPassword(cleanEmail, password)
+            .addOnCompleteListener(this) { task ->
+                isAuthLoading = false
+                if (task.isSuccessful) {
+                    val user = auth.currentUser
+                    if (user != null) {
+                        saveCredentials(cleanEmail, password, rememberMe)
+                        navigateToDashboard()
+                    }
+                } else {
+                    val exception = task.exception
+                    val msg = exception?.message ?: ""
+                    Log.e("LoginActivity", "Login failed - Exception: ${exception?.javaClass?.simpleName}, Message: $msg")
+                    when {
+                        // In newer Firebase SDK, FirebaseAuthInvalidCredentialsException covers
+                        // both "wrong password" and "user not found" — redirect to SignUp for all cases
+                        exception is FirebaseAuthInvalidUserException
+                            || exception is FirebaseAuthInvalidCredentialsException
+                            || msg.contains("user-not-found", true)
+                            || msg.contains("no user record", true)
+                            || msg.contains("invalid-credential", true)
+                            || msg.contains("incorrect", true)
+                            || msg.contains("malformed", true)
+                            || msg.contains("expired", true) -> {
+                            Log.d("LoginActivity", "Redirecting to SignUp - credential issue or user not found")
+                            val intent = Intent(this, SignUpActivity::class.java).apply {
+                                putExtra("prefill_email", cleanEmail)
+                            }
+                            startActivity(intent)
                         }
-                        startActivity(intent)
-                        return@addOnCompleteListener
+                        msg.contains("wrong-password", true) ->
+                            loginErrorMessage = "Incorrect password. Please try again."
+                        msg.contains("invalid-email", true) ->
+                            loginErrorMessage = "Enter a valid email address."
+                        msg.contains("network", true) ->
+                            loginErrorMessage = "Check your internet connection and try again."
+                        else -> {
+                            Log.d("LoginActivity", "Unhandled error - redirecting to SignUp")
+                            val intent = Intent(this, SignUpActivity::class.java).apply {
+                                putExtra("prefill_email", cleanEmail)
+                            }
+                            startActivity(intent)
+                        }
                     }
                 }
-
-                // Email exists (or fetch fallback), attempt sign in with password
-                auth.signInWithEmailAndPassword(cleanEmail, password)
-                    .addOnCompleteListener(this) { task ->
-                        isAuthLoading = false
-                        if (task.isSuccessful) {
-                            val user = auth.currentUser
-                            if (user != null) {
-                                saveCredentials(cleanEmail, password, rememberMe)
-                                navigateToDashboard()
-                            }
-                        } else {
-                            val exception = task.exception
-                            val msg = exception?.message ?: ""
-                            if (exception is FirebaseAuthInvalidUserException || msg.contains("user-not-found", true) || msg.contains("no user record", true)) {
-                                // Redirect to Sign Up page pre-filling email
-                                val intent = Intent(this, SignUpActivity::class.java).apply {
-                                    putExtra("prefill_email", cleanEmail)
-                                }
-                                startActivity(intent)
-                            } else if (exception is FirebaseAuthInvalidCredentialsException || msg.contains("wrong-password", true) || msg.contains("invalid-credential", true)) {
-                                loginErrorMessage = "Incorrect password. Please try again."
-                            } else if (msg.contains("invalid-email", true)) {
-                                loginErrorMessage = "Enter a valid email address."
-                            } else if (msg.contains("network", true)) {
-                                loginErrorMessage = "Check your internet connection and try again."
-                            } else {
-                                loginErrorMessage = "Incorrect password. Please try again."
-                            }
-                        }
-                    }
             }
     }
 

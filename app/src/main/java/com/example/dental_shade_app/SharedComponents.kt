@@ -2,7 +2,9 @@ package com.example.dental_shade_app
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import android.view.ViewGroup
 import androidx.camera.core.*
 import androidx.camera.view.PreviewView
@@ -344,6 +346,48 @@ fun PatientSelectionScreen(
                         Text("Register profile & link scan instantly", fontSize = 12.sp, color = Color.White.copy(0.85f))
                     }
                     Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Option 2: Save as Quick Scan (no patient link)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { 
+                        onPatientSelected(Patient(
+                            id = "quick_scan",
+                            name = "Quick Scan",
+                            age = "",
+                            gender = "",
+                            phone = "",
+                            notes = ""
+                        )) 
+                    },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape,
+                        color = PortalAccentLight
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Save, contentDescription = null, tint = PortalAccent)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Save as Quick Scan", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = PortalTextMain)
+                        Text("No patient link — for unassigned scans", fontSize = 12.sp, color = PortalTextMuted)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = PortalTextMuted)
                 }
             }
 
@@ -833,6 +877,44 @@ fun ProcessingScreen(
             onFail("Please capture or upload a clear tooth image before analysis.")
             return@LaunchedEffect
         }
+
+        // ML Kit face/tooth gate — runs before any other check
+        val mlKitLabeler = com.google.mlkit.vision.label.ImageLabeling.getClient(
+            com.google.mlkit.vision.label.defaults.ImageLabelerOptions.Builder()
+                .setConfidenceThreshold(0.5f).build()
+        )
+        val mlImage = com.google.mlkit.vision.common.InputImage.fromBitmap(inputBitmap, 0)
+
+        val gateResult = kotlinx.coroutines.suspendCancellableCoroutine<String?> { cont ->
+            mlKitLabeler.process(mlImage)
+                .addOnSuccessListener { labels ->
+                    val labelMap = labels.associate { it.text.lowercase() to it.confidence }
+                    android.util.Log.d("ToothGate", "Labels: " + labels.take(6).joinToString { "${it.text}(${(it.confidence*100).toInt()}%)" })
+
+                    val toothKeywords = setOf("tooth","teeth","mouth","dentistry","dentist","smile","human mouth","jaw","gums","oral","incisor","molar","enamel","crown")
+                    val faceKeywords  = setOf("face","nose","eye","ear","forehead","cheek","skin","hair","person","selfie","portrait","head","neck","lip","eyebrow","eyelash")
+                    val objectKeywords = setOf("laptop","computer","keyboard","table","desk","furniture","food","plant","vehicle","sky","building","animal","cat","dog","wall","floor","phone","bottle","cup","shirt","glasses")
+
+                    val hasTeeth  = labelMap.entries.any { (k,v) -> toothKeywords.any { k.contains(it) } && v >= 0.50f }
+                    val hasFace   = labelMap.entries.any { (k,v) -> faceKeywords.any  { k.contains(it) } && v >= 0.50f }
+                    val hasObject = labelMap.entries.any { (k,v) -> objectKeywords.any{ k.contains(it) } && v >= 0.55f }
+
+                    when {
+                        hasTeeth  -> cont.resume(null) // allow
+                        hasFace   -> cont.resume("No teeth visible in the image. Please open your mouth and show your teeth clearly for shade analysis.")
+                        hasObject -> cont.resume("This image does not appear to contain teeth. Please capture a clear photo of the patient's teeth.")
+                        else      -> cont.resume(null) // uncertain — let pixel check decide
+                    }
+                }
+                .addOnFailureListener { cont.resume(null) } // ML Kit failed — continue
+        }
+        mlKitLabeler.close()
+
+        if (gateResult != null) {
+            onFail(gateResult)
+            return@LaunchedEffect
+        }
+
         val qualityCheck = ImageQualityChecker.checkBitmapQuality(inputBitmap)
         if (qualityCheck is DetailedQualityResult.Invalid) {
             onFail(qualityCheck.reason)
@@ -1659,6 +1741,35 @@ fun PatientHistoryScreen(
     }
 }
 
+// Decodes a base64 data URL or a regular URI into a Bitmap for display
+// Uses produceState to decode off the main thread — avoids remember key collision
+@Composable
+fun rememberScanImagePainter(imageUri: String): androidx.compose.ui.graphics.painter.Painter {
+    val bitmapState = produceState<Bitmap?>(initialValue = null, key1 = imageUri) {
+        value = if (imageUri.startsWith("data:image")) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val base64Data = imageUri.substringAfter("base64,")
+                    val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                } catch (e: Exception) {
+                    android.util.Log.e("ScanImage", "Failed to decode base64: ${e.message}")
+                    null
+                }
+            }
+        } else null
+    }
+
+    val bitmap = bitmapState.value
+    return if (bitmap != null) {
+        remember(bitmap) {
+            androidx.compose.ui.graphics.painter.BitmapPainter(bitmap.asImageBitmap())
+        }
+    } else {
+        rememberAsyncImagePainter(imageUri)
+    }
+}
+
 @Composable
 fun ScanResultCard(result: ScanResult, onDelete: (() -> Unit)? = null, onClick: () -> Unit) {
     val date = SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()).format(Date(result.dateTime))
@@ -1671,7 +1782,7 @@ fun ScanResultCard(result: ScanResult, onDelete: (() -> Unit)? = null, onClick: 
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).background(PortalAccentLight), contentAlignment = Alignment.Center) {
                 if (result.imageUri.isNotEmpty()) {
-                    Image(painter = rememberAsyncImagePainter(result.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Image(painter = rememberScanImagePainter(result.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
                     Text(result.predictedShade, fontWeight = FontWeight.Black, color = PortalAccent, fontSize = 18.sp)
                 }
@@ -1785,7 +1896,8 @@ fun ReportScreen(
     onExportPdf: () -> Unit,
     onDeleteScan: () -> Unit,
     onReanalyzeScan: () -> Unit,
-    onSaveNotes: (String) -> Unit
+    onSaveNotes: (String) -> Unit,
+    onEditPatient: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var doctorNotesText by remember { mutableStateOf(report.doctorNotes) }
@@ -1805,7 +1917,7 @@ fun ReportScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Image(
-                        painter = rememberAsyncImagePainter(report.imageUri),
+                        painter = rememberScanImagePainter(report.imageUri),
                         contentDescription = "Zoomed Tooth Image",
                         modifier = Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(16.dp)),
                         contentScale = ContentScale.Fit
@@ -1889,6 +2001,21 @@ fun ReportScreen(
                             Text(time, fontSize = 12.sp, color = PortalTextMuted)
                         }
                     }
+                    
+                    // Edit Patient button (only show if patient exists and callback provided)
+                    if (patient != null && onEditPatient != null && patient.id != "quick_scan") {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedButton(
+                            onClick = onEditPatient,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, PortalAccent)
+                        ) {
+                            Icon(Icons.Default.Edit, null, tint = PortalAccent, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Edit Patient Details", color = PortalAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
                 }
             }
 
@@ -1912,7 +2039,7 @@ fun ReportScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         if (report.imageUri.isNotEmpty()) {
-                            Image(painter = rememberAsyncImagePainter(report.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            Image(painter = rememberScanImagePainter(report.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                         } else {
                             Text("No Image Sample", color = Color.White.copy(0.7f))
                         }
@@ -2183,7 +2310,7 @@ fun DeletedScansScreen(
                             Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(PortalAccentLight), contentAlignment = Alignment.Center) {
                                     if (record.scan.imageUri.isNotEmpty()) {
-                                        Image(painter = rememberAsyncImagePainter(record.scan.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                        Image(painter = rememberScanImagePainter(record.scan.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                     } else {
                                         Text(record.scan.predictedShade, fontWeight = FontWeight.Bold, color = PortalAccent)
                                     }
@@ -2632,7 +2759,7 @@ fun CompareScansDialog(initialScan: ScanResult, allScans: List<ScanResult>, onDi
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(12.dp)).background(Color.White), contentAlignment = Alignment.Center) {
                                 if (scanA.imageUri.isNotEmpty()) {
-                                    Image(painter = rememberAsyncImagePainter(scanA.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                    Image(painter = rememberScanImagePainter(scanA.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                 } else {
                                     Text(scanA.predictedShade, fontWeight = FontWeight.Black, color = PortalAccent, fontSize = 20.sp)
                                 }
@@ -2650,7 +2777,7 @@ fun CompareScansDialog(initialScan: ScanResult, allScans: List<ScanResult>, onDi
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(12.dp)).background(Color.White), contentAlignment = Alignment.Center) {
                                 if (scanB.imageUri.isNotEmpty()) {
-                                    Image(painter = rememberAsyncImagePainter(scanB.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                    Image(painter = rememberScanImagePainter(scanB.imageUri), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                                 } else {
                                     Text(scanB.predictedShade, fontWeight = FontWeight.Black, color = Color(0xFF6D28D9), fontSize = 20.sp)
                                 }

@@ -104,6 +104,7 @@ class DashboardActivity : AppCompatActivity() {
                 var capturedUri by remember { mutableStateOf<Uri?>(null) }
                 var selectedPatient by remember { mutableStateOf<Patient?>(null) }
                 var lastScanId by remember { mutableStateOf<String?>(null) }
+                var pendingScanImageUri by remember { mutableStateOf<String?>(null) }
                 
                 var patientList by remember { mutableStateOf<List<Patient>>(emptyList()) }
                 var localHistory by remember { mutableStateOf(historyManager.getHistory()) }
@@ -136,25 +137,42 @@ class DashboardActivity : AppCompatActivity() {
                     }
                 }
 
-                // Helper for saving reports
                 val performSaveReport = { patient: Patient ->
                     val uid = auth.currentUser?.uid
                     if (uid != null) {
-                        val reportData = mapOf(
+                        val imageUri = pendingScanImageUri ?: ""
+                        val scanId = lastScanId ?: UUID.randomUUID().toString()
+
+                        // Save to local history NOW (only on explicit save)
+                        historyManager.saveResult(ScanResult(
+                            id = scanId,
+                            dateTime = System.currentTimeMillis(),
+                            predictedShade = analysisResultShade,
+                            confidence = analysisConfidence,
+                            imageUri = imageUri,
+                            patientId = patient.id,
+                            patientName = patient.name
+                        ))
+                        localHistory = historyManager.getHistory()
+                        lastScanId = scanId
+                        pendingScanImageUri = null
+
+                        val reportData = mutableMapOf<String, Any>(
                             "patientId" to patient.id,
                             "patientName" to patient.name,
                             "shade" to analysisResultShade,
                             "confidence" to analysisConfidence,
                             "timestamp" to System.currentTimeMillis()
                         )
-                        
-                        // Update local history with patient ID if it's missing
-                        lastScanId?.let { scanId ->
-                            historyManager.updatePatientId(scanId, patient.id, patient.name)
-                            localHistory = historyManager.getHistory()
+
+                        // Save image separately to avoid 10MB Firebase node limit
+                        if (imageUri.isNotEmpty()) {
+                            database.getReference("ScanImages").child(uid).child(scanId)
+                                .setValue(imageUri)
+                            reportData["imageUri"] = imageUri
                         }
 
-                        database.getReference("Reports").child(uid).push().setValue(reportData)
+                        database.getReference("Reports").child(uid).child(scanId).setValue(reportData)
                             .addOnCompleteListener { task ->
                                 if (task.isSuccessful) {
                                     Toast.makeText(context, "Report Saved Successfully!", Toast.LENGTH_SHORT).show()
@@ -166,6 +184,17 @@ class DashboardActivity : AppCompatActivity() {
                             }
                     } else {
                         Toast.makeText(context, "Report Saved Locally", Toast.LENGTH_SHORT).show()
+                        val scanId = lastScanId ?: UUID.randomUUID().toString()
+                        historyManager.saveResult(ScanResult(
+                            id = scanId,
+                            dateTime = System.currentTimeMillis(),
+                            predictedShade = analysisResultShade,
+                            confidence = analysisConfidence,
+                            imageUri = pendingScanImageUri ?: "",
+                            patientId = patient.id,
+                            patientName = patient.name
+                        ))
+                        pendingScanImageUri = null
                         localHistory = historyManager.getHistory()
                         navController.navigate("home") { popUpTo("home") { inclusive = false } }
                     }
@@ -191,6 +220,82 @@ class DashboardActivity : AppCompatActivity() {
                             snapshot.child("age").value?.toString()?.let { doctorAge = it }
                             snapshot.child("gender").value?.toString()?.let { doctorGender = it }
                             snapshot.child("mobile").value?.toString()?.let { doctorMobile = it }
+                        }
+                        override fun onCancelled(error: DatabaseError) {}
+                    })
+
+                    // Sync Reports from Firebase into local history (restores scans after reinstall)
+                    database.getReference("Reports").child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (!snapshot.exists()) return
+                            val existingIds = historyManager.getHistory().map { it.id }.toSet()
+                            val deletedIds = historyManager.getDeletedHistory().map { it.scan.id }.toSet()
+                            var restored = false
+                            for (child in snapshot.children) {
+                                val id = child.key ?: continue
+                                if (id in existingIds || id in deletedIds) continue
+                                val imageUri = child.child("imageUri").value?.toString() ?: ""
+                                val scan = ScanResult(
+                                    id = id,
+                                    dateTime = child.child("timestamp").getValue(Long::class.java) ?: System.currentTimeMillis(),
+                                    predictedShade = child.child("shade").value?.toString() ?: "",
+                                    confidence = child.child("confidence").value?.toString() ?: "",
+                                    imageUri = imageUri,
+                                    patientId = child.child("patientId").value?.toString() ?: "",
+                                    patientName = child.child("patientName").value?.toString() ?: "Quick Scan"
+                                )
+                                // If imageUri missing from report, try ScanImages node
+                                if (imageUri.isEmpty()) {
+                                    database.getReference("ScanImages").child(uid).child(id)
+                                        .addListenerForSingleValueEvent(object : ValueEventListener {
+                                            override fun onDataChange(imgSnap: DataSnapshot) {
+                                                val img = imgSnap.value?.toString() ?: ""
+                                                historyManager.saveResult(scan.copy(imageUri = img))
+                                                localHistory = historyManager.getHistory()
+                                            }
+                                            override fun onCancelled(error: DatabaseError) {
+                                                historyManager.saveResult(scan)
+                                                localHistory = historyManager.getHistory()
+                                            }
+                                        })
+                                } else {
+                                    historyManager.saveResult(scan)
+                                    restored = true
+                                }
+                            }
+                            if (restored) {
+                                localHistory = historyManager.getHistory()
+                            }
+                        }
+                        override fun onCancelled(error: DatabaseError) {
+                            Log.e("DashboardActivity", "Failed to sync reports: ${error.message}")
+                        }
+                    })
+
+                    // Also sync DeletedReports from Firebase
+                    database.getReference("DeletedReports").child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+                        override fun onDataChange(snapshot: DataSnapshot) {
+                            if (!snapshot.exists()) return
+                            val deletedIds = historyManager.getDeletedHistory().map { it.scan.id }.toSet()
+                            var restored = false
+                            for (child in snapshot.children) {
+                                val id = child.key ?: continue
+                                if (id in deletedIds) continue
+                                val scan = ScanResult(
+                                    id = id,
+                                    dateTime = child.child("timestamp").getValue(Long::class.java) ?: System.currentTimeMillis(),
+                                    predictedShade = child.child("shade").value?.toString() ?: "",
+                                    confidence = child.child("confidence").value?.toString() ?: "",
+                                    imageUri = child.child("imageUri").value?.toString() ?: "",
+                                    patientId = child.child("patientId").value?.toString() ?: "",
+                                    patientName = child.child("patientName").value?.toString() ?: "Quick Scan"
+                                )
+                                historyManager.softDeleteFromFirebase(scan, child.child("deletedAt").getValue(Long::class.java) ?: System.currentTimeMillis())
+                                restored = true
+                            }
+                            if (restored) {
+                                localHistory = historyManager.getHistory()
+                            }
                         }
                         override fun onCancelled(error: DatabaseError) {}
                     })
@@ -309,21 +414,13 @@ class DashboardActivity : AppCompatActivity() {
 
                                     scope.launch {
                                         val localUri = capturedUri?.let { saveImageToInternalStorage(it) }
-                                        val base64Image = result.croppedBitmap?.let { bitmapToBase64DataUrl(it) } 
+                                        val base64Image = result.croppedBitmap?.let { bitmapToBase64DataUrl(it) }
                                             ?: localUri.toString()
                                         val scanId = UUID.randomUUID().toString()
                                         lastScanId = scanId
-
-                                        historyManager.saveResult(ScanResult(
-                                            id = scanId,
-                                            dateTime = System.currentTimeMillis(),
-                                            predictedShade = analysisResultShade,
-                                            confidence = analysisConfidence,
-                                            imageUri = base64Image,
-                                            patientId = selectedPatient?.id ?: ""
-                                        ))
-                                        localHistory = historyManager.getHistory()
-                                        // Replace workflow in stack so Back on Result page goes directly to Dashboard
+                                        // Store pending scan data — do NOT save to history yet
+                                        // Scan is only saved when user explicitly clicks Save/Link Patient
+                                        pendingScanImageUri = base64Image
                                         navController.navigate("result") {
                                             popUpTo("home") { inclusive = false }
                                         }
@@ -340,6 +437,9 @@ class DashboardActivity : AppCompatActivity() {
                         var showDiscardDialog by remember { mutableStateOf(false) }
 
                         val navigateToDashboard = {
+                            // Discard — clear pending scan, do NOT save anything
+                            pendingScanImageUri = null
+                            lastScanId = null
                             capturedUri = null
                             selectedPatient = null
                             navController.navigate("home") { popUpTo("home") { inclusive = false } }
@@ -407,8 +507,36 @@ class DashboardActivity : AppCompatActivity() {
                             results = localHistory,
                             onBack = { navController.popBackStack() },
                             onDelete = { id -> 
+                                val target = localHistory.find { it.id == id }
                                 historyManager.softDeleteResult(id)
                                 localHistory = historyManager.getHistory()
+                                val uid = auth.currentUser?.uid
+                                if (uid != null) {
+                                    val reportRef = database.getReference("Reports").child(uid).child(id)
+                                    reportRef.get().addOnSuccessListener { snapshot ->
+                                        if (snapshot.exists()) {
+                                            val data = snapshot.value
+                                            val deletedRef = database.getReference("DeletedReports").child(uid).child(id)
+                                            deletedRef.setValue(data).addOnCompleteListener {
+                                                deletedRef.child("deletedAt").setValue(System.currentTimeMillis())
+                                                reportRef.removeValue()
+                                            }
+                                        } else if (target != null) {
+                                            val deletedRef = database.getReference("DeletedReports").child(uid).child(id)
+                                            val map = mapOf(
+                                                "id" to target.id,
+                                                "patientId" to target.patientId,
+                                                "patientName" to target.patientName,
+                                                "shade" to target.predictedShade,
+                                                "confidence" to target.confidence,
+                                                "imageUri" to target.imageUri,
+                                                "timestamp" to target.dateTime,
+                                                "deletedAt" to System.currentTimeMillis()
+                                            )
+                                            deletedRef.setValue(map)
+                                        }
+                                    }
+                                }
                             },
                             onRecordClick = { report ->
                                 navController.navigate("history_report_detail/${report.id}")
@@ -470,7 +598,10 @@ class DashboardActivity : AppCompatActivity() {
                                     historyManager.updateDoctorNotes(result.id, notes)
                                     localHistory = historyManager.getHistory()
                                     Toast.makeText(context, "Notes saved!", Toast.LENGTH_SHORT).show()
-                                }
+                                },
+                                onEditPatient = if (patient != null) {{
+                                    navController.navigate("edit_patient/${patient.id}")
+                                }} else null
                             )
                         }
                     }
@@ -847,6 +978,14 @@ class LocalScanHistoryManager(private val context: Context) {
             if (it.id == scanId) it.copy(doctorNotes = notes) else it 
         }
         saveList(list)
+    }
+
+    fun softDeleteFromFirebase(scan: ScanResult, deletedAt: Long) {
+        val deletedList = getDeletedHistory().toMutableList()
+        if (deletedList.none { it.scan.id == scan.id }) {
+            deletedList.add(0, DeletedScanRecord(scan, deletedAt))
+            saveDeletedList(deletedList)
+        }
     }
 
     fun softDeleteResult(id: String) {

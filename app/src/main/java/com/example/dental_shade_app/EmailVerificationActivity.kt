@@ -95,11 +95,16 @@ class EmailVerificationActivity : AppCompatActivity() {
                 )
 
                 database.getReference("Users").child(user.uid).setValue(userMap)
-                    .addOnCompleteListener { dbTask ->
-                        prefs.edit().clear().apply()
-                        Toast.makeText(this, "Email verified successfully! Welcome to ShadeScan AI.", Toast.LENGTH_SHORT).show()
-                        startActivity(Intent(this, DashboardActivity::class.java))
-                        finish()
+                    .addOnCompleteListener {
+                        database.getReference("doctors").child(user.uid).setValue(userMap)
+                            .addOnCompleteListener {
+                                prefs.edit().clear().apply()
+                                Toast.makeText(this, "Email verified! Welcome to ShadeScan AI.", Toast.LENGTH_SHORT).show()
+                                val intent = Intent(this, DashboardActivity::class.java)
+                                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                startActivity(intent)
+                                finish()
+                            }
                     }
             } else {
                 Toast.makeText(this, "Email is not verified yet. Please check your inbox and click the link.", Toast.LENGTH_LONG).show()
